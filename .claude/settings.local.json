@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(mvn clean *)",
+      "Bash(where mvn *)",
+      "Read(//d/apache-maven-3.9.9-bin//**)",
+      "Read(//d/apache-maven-3.9.9-bin/bin/**)",
+      "Bash(export PATH=\"$PATH:/d/apache-maven-3.9.9-bin/apache-maven-3.9.9/bin\")",
+      "Bash(mvn -version)",
+      "Read(//d/jdk//**)",
+      "Read(//c/Program Files/**)",
+      "Bash(java -version)",
+      "Bash(where javac *)",
+      "Read(//d/Program Files//**)",
+      "Bash(/d/ideaIU-2024.1.5.win/jbr/bin/java *)",
+      "Bash(export JAVA_HOME=\"/d/ideaIU-2024.1.5.win/jbr\")",
+      "Bash(export PATH=\"$JAVA_HOME/bin:/d/apache-maven-3.9.9-bin/apache-maven-3.9.9/bin:$PATH\")",
+      "Bash(mvn dependency:tree -pl acgAgent-service-user -f /d/ideaproject/acgAgent/pom.xml)",
+      "Bash(jar tf *)"
+    ]
+  }
+}
