@@ -9,13 +9,13 @@
 mvn clean package -DskipTests
 
 # 构建单个模块
-mvn clean package -pl acgAgent-service-user -DskipTests
+mvn clean package -pl acgagent-service-user -DskipTests
 
 # 运行测试
 mvn test
 
 # 运行单个测试类
-mvn test -pl acgAgent-service-user -Dtest=UserControllerTest
+mvn test -pl acgagent-service-user -Dtest=UserControllerTest
 ```
 
 项目没有 Maven Wrapper（`mvnw`），使用系统安装的 Maven。父 POM 跳过了 Spring Boot 插件（`<skip>true</skip>`），只有可运行的模块（gateway、service-user）通过 `<skip>false</skip>` 覆盖。
@@ -27,20 +27,20 @@ Spring Boot 3.3.5 + Spring Cloud 2023.0.3 + Spring Cloud Alibaba 2023.0.3.4 微�
 ### 模块依赖关系
 
 ```
-acgAgent-common（公共库，无启动类）
+acgagent-common（公共库，无启动类）
   ↑
-acgAgent-service-user（端口 8081，可运行）
-  │  依赖：acgAgent-common, spring-boot-starter-web, mybatis-plus, mysql-connector, nacos-discovery
+acgagent-service-user（端口 8081，可运行）
+  │  依赖：acgagent-common, spring-boot-starter-web, mybatis-plus, mysql-connector, nacos-discovery
 
-acgAgent-gateway（端口 8080，可运行）
+acgagent-gateway（端口 8080，可运行）
   │  依赖：spring-cloud-starter-gateway, nacos-discovery, spring-cloud-loadbalancer
 ```
 
 ### 网关路由
 
-网关监听 8080 端口，将 `/api/user/**` 请求通过 Nacos 服务发现路由到 `acgAgent-service-user`（`lb://acgAgent-service-user`）。CORS 允许所有来源。
+网关监听 8080 端口，将 `/api/user/**` 请求通过 Nacos 服务发现路由到 `acgagent-service-user`（`lb://acgagent-service-user`）。CORS 允许所有来源。
 
-### acgAgent-common — 公共模块
+### acgagent-common — 公共模块
 
 可运行应用均使用 `@SpringBootApplication(scanBasePackages = "com.darkness")`，因此 common 模块的所有 Bean 会被自动扫描。
 
@@ -51,7 +51,7 @@ acgAgent-gateway（端口 8080，可运行）
 | `BizException` | 业务异常，携带 HTTP 风格的 `code` 状态码。 |
 | `GlobalExceptionHandler` | `@RestControllerAdvice`，捕获 `BizException` 和 `Exception`，统一返回 `Result<Void>`。 |
 
-### acgAgent-service-user — 用户 CRUD 服务
+### acgagent-service-user — 用户 CRUD 服务
 
 分层架构：Controller → Service（接口 → 实现）→ Mapper。
 
@@ -64,7 +64,7 @@ acgAgent-gateway（端口 8080，可运行）
 ### 外部基础设施
 
 - **Nacos** 地址 `localhost:8848` — 服务注册与发现
-- **MySQL** 地址 `localhost:3306` — 数据库 `acg_agent`，表 `user`（建表脚本位于 `acgAgent-service-user/src/main/resources/db/schema.sql`）
+- **MySQL** 地址 `localhost:3306` — 数据库 `acg_agent`，表 `user`（建表脚本位于 `acgagent-service-user/src/main/resources/db/schema.sql`）
 
 ### MyBatis-Plus 约定
 

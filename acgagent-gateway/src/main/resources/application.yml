@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: acgAgent-gateway
+    name: acgagent-gateway
   cloud:
     nacos:
       discovery:
@@ -15,6 +15,6 @@ spring:
           lower-case-service-id: true
       routes:
         - id: user-service
-          uri: lb://acgAgent-service-user
+          uri: lb://acgagent-service-user
           predicates:
             - Path=/api/user/**

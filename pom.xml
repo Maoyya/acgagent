@@ -17,9 +17,9 @@
     <packaging>pom</packaging>
 
     <modules>
-        <module>acgAgent-common</module>
-        <module>acgAgent-service-user</module>
-        <module>acgAgent-gateway</module>
+        <module>acgagent-common</module>
+        <module>acgagent-service-user</module>
+        <module>acgagent-gateway</module>
     </modules>
 
     <properties>
