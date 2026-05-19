@@ -1,7 +1,7 @@
 package com.darkness.user.controller;
 
 import com.darkness.common.result.Result;
-import com.darkness.user.entity.User;
+import com.darkness.user.model.UserVO;
 import com.darkness.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -16,23 +16,23 @@ public class UserController {
     private final UserService userService;
 
     @GetMapping("/{id}")
-    public Result<User> getUser(@PathVariable Long id) {
+    public Result<UserVO> getUser(@PathVariable Long id) {
         return Result.success(userService.getUserById(id));
     }
 
     @GetMapping
-    public Result<List<User>> listUsers() {
+    public Result<List<UserVO>> listUsers() {
         return Result.success(userService.listUsers());
     }
 
     @PostMapping
-    public Result<User> createUser(@RequestBody User user) {
-        return Result.success(userService.createUser(user));
+    public Result<UserVO> createUser(@RequestBody UserVO vo) {
+        return Result.success(userService.createUser(vo));
     }
 
     @PutMapping("/{id}")
-    public Result<User> updateUser(@PathVariable Long id, @RequestBody User user) {
-        return Result.success(userService.updateUser(id, user));
+    public Result<UserVO> updateUser(@PathVariable Long id, @RequestBody UserVO vo) {
+        return Result.success(userService.updateUser(id, vo));
     }
 
     @DeleteMapping("/{id}")

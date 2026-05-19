@@ -1,19 +1,18 @@
 package com.darkness.user.service;
 
-import com.baomidou.mybatisplus.extension.service.IService;
-import com.darkness.user.entity.User;
+import com.darkness.user.model.UserVO;
 
 import java.util.List;
 
-public interface UserService extends IService<User> {
+public interface UserService {
 
-    User getUserById(Long id);
+    UserVO getUserById(Long id);
 
-    List<User> listUsers();
+    List<UserVO> listUsers();
 
-    User createUser(User user);
+    UserVO createUser(UserVO vo);
 
-    User updateUser(Long id, User user);
+    UserVO updateUser(Long id, UserVO vo);
 
     void deleteUser(Long id);
 }

@@ -1,46 +1,56 @@
 package com.darkness.user.service.impl;
 
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.darkness.common.exception.BizException;
+import com.darkness.user.converter.UserConverter;
 import com.darkness.user.entity.User;
-import com.darkness.user.mapper.UserMapper;
+import com.darkness.user.model.UserVO;
+import com.darkness.user.repository.UserRepository;
 import com.darkness.user.service.UserService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 @Service
-public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
+@RequiredArgsConstructor
+public class UserServiceImpl implements UserService {
+
+    private final UserRepository userRepository;
 
     @Override
-    public User getUserById(Long id) {
-        User user = this.getById(id);
-        if (user == null) {
-            throw new BizException(404, "User not found: " + id);
-        }
-        return user;
+    public UserVO getUserById(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new BizException(404, "User not found: " + id));
+        return UserConverter.toVO(user);
     }
 
     @Override
-    public List<User> listUsers() {
-        return this.list();
+    public List<UserVO> listUsers() {
+        List<User> users = userRepository.findAll();
+        return UserConverter.toVOList(users);
     }
 
     @Override
-    public User createUser(User user) {
-        this.save(user);
-        return user;
+    public UserVO createUser(UserVO vo) {
+        User user = UserConverter.toEntity(vo);
+        userRepository.save(user);
+        return UserConverter.toVO(user);
     }
 
     @Override
-    public User updateUser(Long id, User user) {
+    public UserVO updateUser(Long id, UserVO vo) {
+        userRepository.findById(id)
+                .orElseThrow(() -> new BizException(404, "User not found: " + id));
+        User user = UserConverter.toEntity(vo);
         user.setId(id);
-        this.updateById(user);
-        return this.getById(id);
+        userRepository.save(user);
+        return UserConverter.toVO(userRepository.findById(id).orElse(null));
     }
 
     @Override
     public void deleteUser(Long id) {
-        this.removeById(id);
+        userRepository.findById(id)
+                .orElseThrow(() -> new BizException(404, "User not found: " + id));
+        userRepository.deleteById(id);
     }
 }
