@@ -1,4 +1,4 @@
-# 架构精简设计：单体应用 + Agent SSE 流式对话
+# 架构精简设计：单体应用 + 认证体系 + Agent SSE 流式对话
 
 ## 背景
 
@@ -18,6 +18,7 @@
 3. 完整实现 RBAC（用户 + 角色 + 权限管理）
 4. 新增 Agent 管理 + SSE 流式对话能力
 5. 统一数据库 Schema，修复所有不一致
+6. JWT 认证 + 微信开放平台登录 + 手机短信验证码登录 + 用户注册
 
 ## 项目结构
 
@@ -62,23 +63,68 @@ acgAgent/
     │   └── client/AgentClient.java
     └── config/
         ├── MyBatisPlusConfig.java
-        └── WebConfig.java
+        ├── WebConfig.java
+        ├── SecurityConfig.java              ← Spring Security + JWT 过滤器
+        └── WxConfig.java                    ← 微信开放平台配置
+```
+
+### 认证模块结构
+
+```
+auth/
+├── controller/AuthController.java          ← 登录/注册/刷新 token
+├── service/AuthService.java
+├── service/SmsService.java                 ← 短信验证码发送/校验
+├── service/WxAuthService.java              ← 微信 OAuth2 流程
+├── filter/JwtAuthenticationFilter.java     ← JWT token 校验过滤器
+├── util/JwtUtil.java                       ← JWT 生成/解析
+├── util/PasswordUtil.java                  ← 密码加密/校验（BCrypt）
+├── entity/SmsCodeDO.java                   ← 验证码记录
+├── entity/WxUserDO.java                    ← 微信用户绑定
+├── mapper/SmsCodeMapper.java
+└── mapper/WxUserMapper.java
 ```
 
 ## 数据库设计
 
 数据库名：`acg_agent`。所有有独立 id 的表都有 `deleted` 字段，关联表（user_role、role_permission）无 deleted。
 
+### 认证相关（新增）
+
+```sql
+-- 微信用户绑定表：一个微信 openid 可能绑定一个 sys_user
+CREATE TABLE wx_user (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    openid VARCHAR(128) NOT NULL UNIQUE,
+    union_id VARCHAR(128),
+    user_id BIGINT NOT NULL COMMENT '绑定的 sys_user.id',
+    nickname VARCHAR(64),
+    avatar_url VARCHAR(512),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- 短信验证码记录表
+CREATE TABLE sms_code (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    phone VARCHAR(20) NOT NULL,
+    code VARCHAR(6) NOT NULL,
+    used TINYINT NOT NULL DEFAULT 0,
+    expired_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
 ### 用户相关
 
 ```sql
 CREATE TABLE sys_user (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    username VARCHAR(64) NOT NULL UNIQUE,
-    password VARCHAR(256) NOT NULL,
+    username VARCHAR(64) UNIQUE,
+    password VARCHAR(256),
     nickname VARCHAR(64),
     email VARCHAR(128),
-    phone VARCHAR(20),
+    phone VARCHAR(20) UNIQUE,
     avatar VARCHAR(512),
     status TINYINT NOT NULL DEFAULT 1,
     deleted TINYINT NOT NULL DEFAULT 0,
@@ -167,6 +213,18 @@ CREATE TABLE message (
 message 表不需要 deleted 和 updated_at，消息只增不改。
 
 ## API 设计
+
+### 认证（公开接口，无需 token）
+
+| Method | Path | Handler | Returns | 说明 |
+|--------|------|---------|---------|------|
+| POST | `/api/auth/register` | AuthController.register | `Result<UserVO>` | 用户名+密码注册 |
+| POST | `/api/auth/login` | AuthController.login | `Result<TokenVO>` | 用户名+密码登录，返回 JWT |
+| POST | `/api/auth/sms/send` | AuthController.sendSmsCode | `Result<Void>` | 发送短信验证码 |
+| POST | `/api/auth/sms/login` | AuthController.smsLogin | `Result<TokenVO>` | 手机号+验证码登录（未注册自动注册） |
+| POST | `/api/auth/wx/qrcode` | AuthController.wxQrcode | `Result<WxQrcodeVO>` | 获取微信扫码登录二维码 |
+| POST | `/api/auth/wx/callback` | AuthController.wxCallback | `Result<TokenVO>` | 微信回调，换 JWT（未绑定自动注册） |
+| POST | `/api/auth/refresh` | AuthController.refresh | `Result<TokenVO>` | 刷新 access_token |
 
 ### 用户管理
 
@@ -275,14 +333,40 @@ VO 用简单的静态工厂方法或 BeanUtils.copyProperties 做映射，不单
 | 组件 | 选择 | 说明 |
 |------|------|------|
 | Web 框架 | Spring Boot 3.3.5 + spring-boot-starter-web | Servlet 模式，SseEmitter |
+| 安全框架 | Spring Security + JWT (jjwt) | 无状态认证，不使用 Session |
 | ORM | MyBatis-Plus 3.5.9 | 保持不变 |
 | 数据库 | MySQL 8 | 保持不变 |
+| 连接池 | Druid (druid-spring-boot-3-starter) | 监控面板 + 慢 SQL 日志 |
 | HTTP 客户端 | WebClient (Spring WebFlux) | 仅用于 AgentClient 的流式调用 |
-| 连接池 | HikariCP | Spring Boot 默认 |
+| 密码加密 | BCrypt (Spring Security 内置) | |
+| 短信服务 | 阿里云 SMS / 腾讯云 SMS | 通过 SmsService 接口抽象，可切换实现 |
+| 微信登录 | 微信开放平台 OAuth2 | 扫码登录 + 小程序登录 |
+
+## 认证流程
+
+### JWT 双 Token 机制
+- **Access Token**：有效期 2 小时，放在 `Authorization: Bearer xxx` header 中
+- **Refresh Token**：有效期 7 天，用于刷新 access token
+- JwtUtil 负责 token 生成、解析、验证过期
+- JwtAuthenticationFilter 拦截所有 `/api/**` 请求（排除公开接口），校验 token 并设置 SecurityContext
+
+### 用户名+密码注册/登录
+1. 注册：POST `/api/auth/register`（username + password）→ 密码 BCrypt 加密后存库
+2. 登录：POST `/api/auth/login`（username + password）→ 校验密码 → 返回 JWT
+
+### 手机短信验证码登录
+1. 发送：POST `/api/auth/sms/send`（phone）→ SmsService 调用短信服务商 → 存 sms_code 表
+2. 登录：POST `/api/auth/sms/login`（phone + code）→ 校验验证码 → 若手机号未注册自动创建用户 → 返回 JWT
+
+### 微信开放平台登录
+1. 前端获取二维码：POST `/api/auth/wx/qrcode` → 返回二维码 URL + state
+2. 用户扫码授权后微信回调：POST `/api/auth/wx/callback`（code + state）
+3. 后端用 code 换 access_token + openid → 查 wx_user 表：
+   - 已绑定：找到 user_id → 返回 JWT
+   - 未绑定：自动创建 sys_user + wx_user 记录 → 返回 JWT
 
 ## 不在本次范围内
 
-- 登录认证 / JWT / Security（后续单独做）
 - 前端页面
 - 文件上传
 - Redis 缓存
