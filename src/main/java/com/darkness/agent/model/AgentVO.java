@@ -1,5 +1,7 @@
 package com.darkness.agent.model;
 
+import com.darkness.agent.constant.AgentConstants;
+import com.darkness.common.enums.CommonStatus;
 import com.darkness.agent.entity.AgentDO;
 import lombok.Data;
 
@@ -32,8 +34,8 @@ public class AgentVO {
     /** 模型标识，如 gpt-4、claude-3-sonnet 等 */
     private String model;
 
-    /** 状态：1-启用，0-禁用 */
-    private Integer status;
+    /** 状态：ENABLED-启用，DISABLED-禁用 */
+    private CommonStatus status;
 
     /** 额外配置参数，JSON 格式 */
     private String configJson;
@@ -60,7 +62,7 @@ public class AgentVO {
         vo.setDescription(entity.getDescription());
         vo.setAvatar(entity.getAvatar());
         vo.setApiUrl(entity.getApiUrl());
-        vo.setApiKey(entity.getApiKey() != null ? "******" : null); // 脱敏：不将真实 API Key 返回前端
+        vo.setApiKey(entity.getApiKey() != null ? AgentConstants.API_KEY_MASK : null); // 脱敏：不将真实 API Key 返回前端
         vo.setModel(entity.getModel());
         vo.setStatus(entity.getStatus());
         vo.setConfigJson(entity.getConfigJson());

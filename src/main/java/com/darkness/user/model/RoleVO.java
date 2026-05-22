@@ -1,5 +1,6 @@
 package com.darkness.user.model;
 
+import com.darkness.common.enums.CommonStatus;
 import com.darkness.user.entity.RoleDO;
 import lombok.Data;
 
@@ -23,8 +24,8 @@ public class RoleVO {
     /** 排序值，数值越小越靠前 */
     private Integer sort;
 
-    /** 状态：1-启用，0-禁用 */
-    private Integer status;
+    /** 状态：ENABLED-启用，DISABLED-禁用 */
+    private CommonStatus status;
 
     /** 备注说明 */
     private String remark;

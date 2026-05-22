@@ -1,12 +1,15 @@
 package com.darkness.auth.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.darkness.auth.constant.WxApiConstants;
 import com.darkness.auth.entity.WxUserDO;
 import com.darkness.auth.mapper.WxUserMapper;
 import com.darkness.auth.model.TokenVO;
 import com.darkness.auth.service.AuthService;
 import com.darkness.auth.service.WxAuthService;
+import com.darkness.common.enums.CommonStatus;
 import com.darkness.common.exception.BizException;
+import com.darkness.common.result.ResultCode;
 import com.darkness.config.WxConfig;
 import com.darkness.user.entity.UserDO;
 import com.darkness.user.mapper.UserMapper;
@@ -68,24 +71,24 @@ public class WxAuthServiceImpl implements WxAuthService {
      */
     @Override
     public TokenVO handleCallback(String code) {
-        if (code == null || code.isBlank()) throw new BizException(400, "Authorization code is required");
+        if (code == null || code.isBlank()) throw new BizException(ResultCode.BAD_REQUEST, "Authorization code is required");
 
         // 用授权码向微信服务器换取 access_token 和 openid
         String tokenUrl = String.format(
-                "https://api.weixin.qq.com/sns/oauth2/access_token?appid=%s&secret=%s&code=%s&grant_type=authorization_code",
-                wxConfig.getAppId(), wxConfig.getAppSecret(), code);
+                "https://api.weixin.qq.com/sns/oauth2/access_token?appid=%s&secret=%s&code=%s&grant_type=%s",
+                wxConfig.getAppId(), wxConfig.getAppSecret(), code, WxApiConstants.GRANT_TYPE_AUTH_CODE);
 
         try {
             RestClient restClient = RestClient.create();
             String response = restClient.get().uri(tokenUrl).retrieve().body(String.class);
             JsonNode json = objectMapper.readTree(response);
 
-            if (json.has("errcode")) {
-                throw new BizException(400, "WeChat auth failed: " + json.get("errmsg").asText());
+            if (json.has(WxApiConstants.FIELD_ERRCODE)) {
+                throw new BizException(ResultCode.BAD_REQUEST, "WeChat auth failed: " + json.get(WxApiConstants.FIELD_ERRMSG).asText());
             }
 
-            String openid = json.get("openid").asText();
-            String accessToken = json.get("access_token").asText();
+            String openid = json.get(WxApiConstants.FIELD_OPENID).asText();
+            String accessToken = json.get(WxApiConstants.FIELD_ACCESS_TOKEN).asText();
 
             // 用 access_token 拉取微信用户信息（昵称、头像）
             String userInfoUrl = String.format(
@@ -104,13 +107,13 @@ public class WxAuthServiceImpl implements WxAuthService {
                 userId = wxUser.getUserId();
             } else {
                 // 未绑定：先创建系统用户，再建立微信绑定关系
-                String nickname = userInfo.has("nickname") ? userInfo.get("nickname").asText() : "wx_user";
-                String avatar = userInfo.has("headimgurl") ? userInfo.get("headimgurl").asText() : null;
+                String nickname = userInfo.has(WxApiConstants.FIELD_NICKNAME) ? userInfo.get(WxApiConstants.FIELD_NICKNAME).asText() : "wx_user";
+                String avatar = userInfo.has(WxApiConstants.FIELD_HEADIMGURL) ? userInfo.get(WxApiConstants.FIELD_HEADIMGURL).asText() : null;
 
                 UserDO user = new UserDO();
                 user.setNickname(nickname);
                 user.setAvatar(avatar);
-                user.setStatus(1);
+                user.setStatus(CommonStatus.ENABLED);
                 userMapper.insert(user);
                 userId = user.getId();
 
@@ -127,7 +130,7 @@ public class WxAuthServiceImpl implements WxAuthService {
             throw e;
         } catch (Exception e) {
             log.error("WeChat auth error", e);
-            throw new BizException(500, "WeChat authentication failed");
+            throw new BizException(ResultCode.INTERNAL_ERROR, "WeChat authentication failed");
         }
     }
 }

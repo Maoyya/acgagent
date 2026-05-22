@@ -3,6 +3,7 @@ package com.darkness.agent.entity;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.darkness.common.enums.MessageRole;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -21,8 +22,8 @@ public class MessageDO {
     /** 所属会话 ID，关联 conversation 表 */
     private Long conversationId;
 
-    /** 角色：user 表示用户发送的消息，assistant 表示 AI 助手的回复 */
-    private String role;
+    /** 消息角色：USER-用户发送，ASSISTANT-AI 回复 */
+    private MessageRole role;
 
     /** 消息正文内容 */
     private String content;

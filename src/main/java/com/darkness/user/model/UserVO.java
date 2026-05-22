@@ -1,5 +1,6 @@
 package com.darkness.user.model;
 
+import com.darkness.common.enums.CommonStatus;
 import com.darkness.user.entity.UserDO;
 import lombok.Data;
 
@@ -30,8 +31,8 @@ public class UserVO {
     /** 头像图片 URL */
     private String avatar;
 
-    /** 状态：1-启用，0-禁用 */
-    private Integer status;
+    /** 状态：ENABLED-启用，DISABLED-禁用 */
+    private CommonStatus status;
 
     /** 创建时间 */
     private LocalDateTime createdAt;

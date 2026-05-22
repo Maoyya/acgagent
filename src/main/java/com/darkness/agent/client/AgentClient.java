@@ -1,7 +1,10 @@
 package com.darkness.agent.client;
 
+import com.darkness.agent.constant.SseConstants;
 import com.darkness.agent.entity.AgentDO;
 import com.darkness.agent.entity.MessageDO;
+import com.darkness.common.constant.AuthConstants;
+import com.darkness.common.enums.MessageRole;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -29,8 +32,8 @@ public class AgentClient {
     /**
      * 以流式方式调用 AI 模型 API，逐 token 返回生成内容。
      * 请求格式遵循 OpenAI ChatCompletion 兼容协议（model + messages + stream=true），
-     * 通过 SSE 协议接收响应，逐行解析 "data:" 前缀的 JSON chunk，从每个 chunk 的
-     * choices[0].delta.content 路径提取增量文本，跳过 "[DONE]" 结束标记和非法行，
+     * 通过 SSE 协议接收响应，逐行解析 data 前缀的 JSON chunk，从每个 chunk 的
+     * choices[0].delta.content 路径提取增量文本，跳过结束标记和非法行，
      * 最终以 Flux 流形式返回拼接后的完整文本。
      *
      * @param agent       Agent 配置（含 apiUrl、apiKey、model）
@@ -40,9 +43,9 @@ public class AgentClient {
      */
     public Flux<String> stream(AgentDO agent, List<MessageDO> history, String userMessage) {
         List<Map<String, String>> messages = history.stream()
-                .map(m -> Map.of("role", m.getRole(), "content", m.getContent()))
+                .map(m -> Map.of("role", m.getRole().getValue(), "content", m.getContent()))
                 .collect(Collectors.toList());
-        messages.add(Map.of("role", "user", "content", userMessage));
+        messages.add(Map.of("role", MessageRole.USER.getValue(), "content", userMessage));
 
         Map<String, Object> body = new HashMap<>();
         body.put("model", agent.getModel());
@@ -51,15 +54,15 @@ public class AgentClient {
 
         return WebClient.create(agent.getApiUrl())
                 .post()
-                .header("Authorization", "Bearer " + agent.getApiKey())
+                .header("Authorization", AuthConstants.BEARER_PREFIX + agent.getApiKey())
                 .header("Content-Type", "application/json")
                 .bodyValue(body)
                 .retrieve()
                 .bodyToFlux(String.class)
-                // 过滤空行和非数据行，跳过 [DONE] 结束标记
-                .filter(line -> !line.isBlank() && line.startsWith("data:"))
-                .map(line -> line.substring(5).trim())
-                .filter(data -> !"[DONE]".equals(data))
+                // 过滤空行和非数据行，跳过结束标记
+                .filter(line -> !line.isBlank() && line.startsWith(SseConstants.DATA_PREFIX))
+                .map(line -> line.substring(SseConstants.DATA_PREFIX.length()).trim())
+                .filter(data -> !SseConstants.DONE_MARKER.equals(data))
                 .handle((data, sink) -> {
                     try {
                         JsonNode json = objectMapper.readTree(data);

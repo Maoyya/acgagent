@@ -2,6 +2,7 @@ package com.darkness.config;
 
 import com.darkness.auth.filter.JwtAuthenticationFilter;
 import com.darkness.common.result.Result;
+import com.darkness.common.result.ResultCode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -67,7 +68,7 @@ public class SecurityConfig {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                             response.getWriter().write(
-                                    objectMapper.writeValueAsString(Result.error(401, "Unauthorized")));
+                                    objectMapper.writeValueAsString(Result.error(ResultCode.UNAUTHORIZED, "Unauthorized")));
                         })
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

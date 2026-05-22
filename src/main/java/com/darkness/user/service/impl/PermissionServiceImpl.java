@@ -1,6 +1,6 @@
 package com.darkness.user.service.impl;
 
-import com.darkness.common.exception.BizException;
+import com.darkness.common.util.ServiceHelper;
 import com.darkness.user.entity.PermissionDO;
 import com.darkness.user.mapper.PermissionMapper;
 import com.darkness.user.model.PermissionVO;
@@ -22,9 +22,7 @@ public class PermissionServiceImpl implements PermissionService {
 
     @Override
     public PermissionVO getPermissionById(Long id) {
-        PermissionDO perm = permissionMapper.selectById(id);
-        if (perm == null) throw new BizException(404, "Permission not found: " + id);
-        return PermissionVO.from(perm);
+        return PermissionVO.from(ServiceHelper.findOrThrow(permissionMapper.selectById(id), "Permission", id));
     }
 
     @Override
@@ -41,8 +39,7 @@ public class PermissionServiceImpl implements PermissionService {
 
     @Override
     public PermissionVO updatePermission(Long id, PermissionVO vo) {
-        PermissionDO existing = permissionMapper.selectById(id);
-        if (existing == null) throw new BizException(404, "Permission not found: " + id);
+        ServiceHelper.findOrThrow(permissionMapper.selectById(id), "Permission", id);
         PermissionDO entity = vo.toEntity();
         entity.setId(id);
         permissionMapper.updateById(entity);
@@ -51,8 +48,7 @@ public class PermissionServiceImpl implements PermissionService {
 
     @Override
     public void deletePermission(Long id) {
-        PermissionDO existing = permissionMapper.selectById(id);
-        if (existing == null) throw new BizException(404, "Permission not found: " + id);
+        ServiceHelper.findOrThrow(permissionMapper.selectById(id), "Permission", id);
         permissionMapper.deleteById(id);
     }
 }

@@ -1,5 +1,6 @@
 package com.darkness.agent.model;
 
+import com.darkness.common.enums.MessageRole;
 import com.darkness.agent.entity.MessageDO;
 import lombok.Data;
 
@@ -17,8 +18,8 @@ public class MessageVO {
     /** 所属会话 ID */
     private Long conversationId;
 
-    /** 角色：user 或 assistant */
-    private String role;
+    /** 消息角色：USER-用户发送，ASSISTANT-AI 回复 */
+    private MessageRole role;
 
     /** 消息正文内容 */
     private String content;

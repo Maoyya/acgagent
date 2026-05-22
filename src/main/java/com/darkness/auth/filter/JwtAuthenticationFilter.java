@@ -2,6 +2,7 @@ package com.darkness.auth.filter;
 
 import com.darkness.auth.model.LoginUserDetails;
 import com.darkness.auth.util.JwtUtil;
+import com.darkness.common.constant.AuthConstants;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,7 +21,7 @@ import java.io.IOException;
  * <p>
  * 过滤逻辑：
  * <ol>
- *   <li>从请求头 Authorization 中提取 Bearer Token（截取 "Bearer " 之后的部分）</li>
+ *   <li>从请求头 Authorization 中提取 Bearer Token（截取 Bearer 前缀之后的部分）</li>
  *   <li>调用 JwtUtil 校验令牌有效性（签名 + 过期时间）</li>
  *   <li>解析出 userId，构造 LoginUserDetails 并写入 SecurityContext</li>
  *   <li>无论 Token 是否存在或有效，都继续执行后续过滤器链</li>
@@ -49,8 +50,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         String header = request.getHeader("Authorization");
-        if (header != null && header.startsWith("Bearer ")) {
-            String token = header.substring(7);
+        if (header != null && header.startsWith(AuthConstants.BEARER_PREFIX)) {
+            String token = header.substring(AuthConstants.BEARER_PREFIX.length());
             if (jwtUtil.isTokenValid(token)) {
                 Long userId = jwtUtil.getUserId(token);
                 // JWT 无密码模式下仅用 userId 做身份标识，不需要密码和权限

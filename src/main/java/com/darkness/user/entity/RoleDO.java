@@ -2,6 +2,7 @@ package com.darkness.user.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.darkness.common.entity.BaseEntity;
+import com.darkness.common.enums.CommonStatus;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -22,8 +23,8 @@ public class RoleDO extends BaseEntity {
     /** 排序值，数值越小越靠前 */
     private Integer sort;
 
-    /** 状态：1-启用，0-禁用 */
-    private Integer status;
+    /** 状态：ENABLED-启用，DISABLED-禁用 */
+    private CommonStatus status;
 
     /** 备注说明 */
     private String remark;

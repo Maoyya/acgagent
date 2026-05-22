@@ -1,5 +1,6 @@
 package com.darkness.auth.util;
 
+import com.darkness.common.enums.TokenType;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -47,7 +48,7 @@ public class JwtUtil {
 
     /**
      * 生成 accessToken。
-     * payload 中 subject 为 userId，type 声明为 "access"，签发时间为当前时间，
+     * payload 中 subject 为 userId，type 声明为 ACCESS，签发时间为当前时间，
      * 过期时间为当前时间 + accessTokenExpiration。
      *
      * @param userId 用户 ID
@@ -56,7 +57,7 @@ public class JwtUtil {
     public String generateAccessToken(Long userId) {
         return Jwts.builder()
                 .subject(String.valueOf(userId))
-                .claim("type", "access")
+                .claim("type", TokenType.ACCESS.getValue())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + accessTokenExpiration))
                 .signWith(getSigningKey())
@@ -65,7 +66,7 @@ public class JwtUtil {
 
     /**
      * 生成 refreshToken。
-     * payload 中 subject 为 userId，type 声明为 "refresh"，签发时间为当前时间，
+     * payload 中 subject 为 userId，type 声明为 REFRESH，签发时间为当前时间，
      * 过期时间为当前时间 + refreshTokenExpiration。
      *
      * @param userId 用户 ID
@@ -74,7 +75,7 @@ public class JwtUtil {
     public String generateRefreshToken(Long userId) {
         return Jwts.builder()
                 .subject(String.valueOf(userId))
-                .claim("type", "refresh")
+                .claim("type", TokenType.REFRESH.getValue())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + refreshTokenExpiration))
                 .signWith(getSigningKey())
@@ -126,12 +127,12 @@ public class JwtUtil {
 
     /**
      * 判断令牌是否为 refreshToken 类型。
-     * 解析 token 的 type 声明，值为 "refresh" 返回 true。
+     * 解析 token 的 type 声明，值为 REFRESH 时返回 true。
      *
      * @param token JWT 字符串
      * @return true 表示是 refreshToken，false 表示是 accessToken
      */
     public boolean isRefreshToken(String token) {
-        return "refresh".equals(parseToken(token).get("type", String.class));
+        return TokenType.REFRESH.getValue().equals(parseToken(token).get("type", String.class));
     }
 }

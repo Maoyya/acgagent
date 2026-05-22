@@ -1,8 +1,7 @@
 package com.darkness.user.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.darkness.common.exception.BizException;
-import com.darkness.user.entity.PermissionDO;
+import com.darkness.common.util.ServiceHelper;
 import com.darkness.user.entity.RoleDO;
 import com.darkness.user.entity.RolePermissionDO;
 import com.darkness.user.mapper.PermissionMapper;
@@ -30,9 +29,7 @@ public class RoleServiceImpl implements RoleService {
 
     @Override
     public RoleVO getRoleById(Long id) {
-        RoleDO role = roleMapper.selectById(id);
-        if (role == null) throw new BizException(404, "Role not found: " + id);
-        return RoleVO.from(role);
+        return RoleVO.from(ServiceHelper.findOrThrow(roleMapper.selectById(id), "Role", id));
     }
 
     @Override
@@ -49,8 +46,7 @@ public class RoleServiceImpl implements RoleService {
 
     @Override
     public RoleVO updateRole(Long id, RoleVO vo) {
-        RoleDO existing = roleMapper.selectById(id);
-        if (existing == null) throw new BizException(404, "Role not found: " + id);
+        ServiceHelper.findOrThrow(roleMapper.selectById(id), "Role", id);
         RoleDO entity = vo.toEntity();
         entity.setId(id);
         roleMapper.updateById(entity);
@@ -59,8 +55,7 @@ public class RoleServiceImpl implements RoleService {
 
     @Override
     public void deleteRole(Long id) {
-        RoleDO existing = roleMapper.selectById(id);
-        if (existing == null) throw new BizException(404, "Role not found: " + id);
+        ServiceHelper.findOrThrow(roleMapper.selectById(id), "Role", id);
         roleMapper.deleteById(id);
     }
 

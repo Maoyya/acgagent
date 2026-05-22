@@ -1,18 +1,19 @@
 package com.darkness.agent.controller;
 
 import com.darkness.agent.model.ConversationVO;
+import com.darkness.agent.model.CreateConversationRequest;
 import com.darkness.agent.model.MessageVO;
+import com.darkness.agent.model.SendMessageRequest;
 import com.darkness.agent.service.ChatService;
 import com.darkness.auth.model.LoginUserDetails;
-import com.darkness.common.exception.BizException;
 import com.darkness.common.result.Result;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * 对话控制器，管理会话的创建/删除/查询，以及通过 SSE 流式发送消息给 Agent。
@@ -28,19 +29,16 @@ public class ChatController {
      * 创建新会话，将用户与指定 Agent 关联。
      * POST /api/chat/conversations（需认证）
      *
-     * @param user 当前登录用户（由 JWT Filter 注入）
-     * @param body 请求体，需包含 agentId（必填）和 title（可选，默认 "New Conversation"）
+     * @param user    当前登录用户（由 JWT Filter 注入）
+     * @param request 请求体，包含 agentId（必填）和 title（可选）
      * @return 创建后的会话视图对象
      */
     @PostMapping("/conversations")
     public Result<ConversationVO> createConversation(
             @AuthenticationPrincipal LoginUserDetails user,
-            @RequestBody Map<String, Object> body) {
-        Object agentIdObj = body.get("agentId");
-        if (agentIdObj == null) throw new BizException(400, "agentId is required");
-        Long agentId = Long.valueOf(agentIdObj.toString());
-        String title = (String) body.getOrDefault("title", "New Conversation");
-        return Result.success(chatService.createConversation(user.getUserId(), agentId, title));
+            @RequestBody @Valid CreateConversationRequest request) {
+        String title = request.getTitle() != null ? request.getTitle() : "New Conversation";
+        return Result.success(chatService.createConversation(user.getUserId(), request.getAgentId(), title));
     }
 
     /**
@@ -77,19 +75,17 @@ public class ChatController {
      * POST /api/chat/conversations/{id}/send（需认证）
      * 此端点返回 SseEmitter 而非 Result&lt;T&gt;，因为 SSE 需要保持长连接持续推送数据，无法用统一响应体包装。
      *
-     * @param user 当前登录用户（由 JWT Filter 注入）
-     * @param id   会话主键
-     * @param body 请求体，需包含 content（用户输入的消息内容）
+     * @param user    当前登录用户（由 JWT Filter 注入）
+     * @param id      会话主键
+     * @param request 请求体，包含 content（用户输入的消息内容）
      * @return SseEmitter 实例，前端通过 EventSource 接收流式数据
      */
     @PostMapping("/conversations/{id}/send")
     public SseEmitter sendMessage(
             @AuthenticationPrincipal LoginUserDetails user,
             @PathVariable Long id,
-            @RequestBody Map<String, String> body) {
-        String content = body.get("content");
-        if (content == null || content.isBlank()) throw new BizException(400, "content is required");
-        return chatService.sendMessage(user.getUserId(), id, content);
+            @RequestBody @Valid SendMessageRequest request) {
+        return chatService.sendMessage(user.getUserId(), id, request.getContent());
     }
 
     /**

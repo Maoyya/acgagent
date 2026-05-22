@@ -2,6 +2,7 @@ package com.darkness.agent.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.darkness.common.entity.BaseEntity;
+import com.darkness.common.enums.CommonStatus;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -31,8 +32,8 @@ public class AgentDO extends BaseEntity {
     /** 模型标识，如 gpt-4、claude-3-sonnet 等 */
     private String model;
 
-    /** 状态：1-启用，0-禁用 */
-    private Integer status;
+    /** 状态：ENABLED-启用，DISABLED-禁用 */
+    private CommonStatus status;
 
     /** 额外配置参数，JSON 格式，如 temperature、max_tokens 等 */
     private String configJson;

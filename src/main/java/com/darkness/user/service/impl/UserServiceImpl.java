@@ -1,7 +1,7 @@
 package com.darkness.user.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.darkness.common.exception.BizException;
+import com.darkness.common.util.ServiceHelper;
 import com.darkness.user.entity.UserDO;
 import com.darkness.user.entity.UserRoleDO;
 import com.darkness.user.mapper.UserMapper;
@@ -26,8 +26,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserVO getUserById(Long id) {
-        UserDO user = userMapper.selectById(id);
-        if (user == null) throw new BizException(404, "User not found: " + id);
+        UserDO user = ServiceHelper.findOrThrow(userMapper.selectById(id), "User", id);
         return UserVO.from(user);
     }
 
@@ -45,8 +44,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserVO updateUser(Long id, UserVO vo) {
-        UserDO existing = userMapper.selectById(id);
-        if (existing == null) throw new BizException(404, "User not found: " + id);
+        ServiceHelper.findOrThrow(userMapper.selectById(id), "User", id);
         UserDO entity = vo.toEntity();
         entity.setId(id);
         userMapper.updateById(entity);
@@ -55,8 +53,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public void deleteUser(Long id) {
-        UserDO existing = userMapper.selectById(id);
-        if (existing == null) throw new BizException(404, "User not found: " + id);
+        ServiceHelper.findOrThrow(userMapper.selectById(id), "User", id);
         userMapper.deleteById(id);
     }
 

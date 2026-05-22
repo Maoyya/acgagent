@@ -30,7 +30,7 @@ public class Result<T> {
      * @return code=200, message="success" 的成功响应
      */
     public static <T> Result<T> success(T data) {
-        return new Result<>(200, "success", data);
+        return new Result<>(ResultCode.SUCCESS.getCode(), ResultCode.SUCCESS.getMessage(), data);
     }
 
     /**
@@ -39,13 +39,24 @@ public class Result<T> {
      * @return code=200, message="success" 的成功响应，data 为 null
      */
     public static <T> Result<T> success() {
-        return new Result<>(200, "success", null);
+        return new Result<>(ResultCode.SUCCESS.getCode(), ResultCode.SUCCESS.getMessage(), null);
     }
 
     /**
-     * 构建错误响应，指定状态码和错误信息。
+     * 构建错误响应，指定 ResultCode 和自定义错误信息。
      *
-     * @param code    错误状态码，如 404、403、500 等
+     * @param resultCode 错误状态码枚举
+     * @param message     错误描述信息
+     * @return 携带错误信息的 Result，data 为 null
+     */
+    public static <T> Result<T> error(ResultCode resultCode, String message) {
+        return new Result<>(resultCode.getCode(), message, null);
+    }
+
+    /**
+     * 构建错误响应，指定状态码和错误信息（向后兼容，逐步废弃）。
+     *
+     * @param code    错误状态码
      * @param message 错误描述信息
      * @return 携带错误信息的 Result，data 为 null
      */
@@ -60,6 +71,6 @@ public class Result<T> {
      * @return code=500 的错误响应，data 为 null
      */
     public static <T> Result<T> error(String message) {
-        return new Result<>(500, message, null);
+        return new Result<>(ResultCode.INTERNAL_ERROR.getCode(), message, null);
     }
 }

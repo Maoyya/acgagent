@@ -2,6 +2,8 @@ package com.darkness.user.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.darkness.common.entity.BaseEntity;
+import com.darkness.common.enums.CommonStatus;
+import com.darkness.common.enums.PermissionType;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -22,8 +24,8 @@ public class PermissionDO extends BaseEntity {
     /** 权限编码，唯一标识，如 "user:list"、"user:create"，用于程序中权限校验 */
     private String code;
 
-    /** 权限类型：1-菜单，2-按钮（操作） */
-    private Integer type;
+    /** 权限类型：MENU-菜单，BUTTON-按钮 */
+    private PermissionType type;
 
     /** 前端路由路径，菜单类型时使用 */
     private String path;
@@ -34,6 +36,6 @@ public class PermissionDO extends BaseEntity {
     /** 排序值，数值越小越靠前 */
     private Integer sort;
 
-    /** 状态：1-启用，0-禁用 */
-    private Integer status;
+    /** 状态：ENABLED-启用，DISABLED-禁用 */
+    private CommonStatus status;
 }

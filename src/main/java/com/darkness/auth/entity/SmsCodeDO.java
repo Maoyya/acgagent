@@ -3,6 +3,7 @@ package com.darkness.auth.entity;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.darkness.common.enums.UsedStatus;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -24,8 +25,8 @@ public class SmsCodeDO {
     /** 6 位数字验证码 */
     private String code;
 
-    /** 是否已使用：0-未使用，1-已使用 */
-    private Integer used;
+    /** 使用状态：UNUSED-未使用，USED-已使用 */
+    private UsedStatus used;
 
     /** 过期时间，超过此时间后验证码失效 */
     private LocalDateTime expiredAt;

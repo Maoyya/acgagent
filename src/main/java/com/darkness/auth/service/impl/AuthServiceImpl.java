@@ -5,7 +5,9 @@ import com.darkness.auth.model.TokenVO;
 import com.darkness.auth.service.AuthService;
 import com.darkness.auth.util.JwtUtil;
 import com.darkness.auth.util.PasswordUtil;
+import com.darkness.common.enums.CommonStatus;
 import com.darkness.common.exception.BizException;
+import com.darkness.common.result.ResultCode;
 import com.darkness.user.entity.UserDO;
 import com.darkness.user.mapper.UserMapper;
 import com.darkness.user.model.UserVO;
@@ -30,7 +32,7 @@ public class AuthServiceImpl implements AuthService {
     /**
      * 用户注册。
      * 校验用户名和密码非空，查询 user 表确认用户名唯一（已存在则抛 BizException(400)），
-     * 使用 BCrypt 加密明文密码后插入用户记录，默认昵称取用户名，状态设为 1（启用）。
+     * 使用 BCrypt 加密明文密码后插入用户记录，默认昵称取用户名，状态设为启用。
      *
      * @param username 用户名，不能为空且不能重复
      * @param password 明文密码，不能为空
@@ -38,18 +40,18 @@ public class AuthServiceImpl implements AuthService {
      */
     @Override
     public UserVO register(String username, String password) {
-        if (username == null || username.isBlank()) throw new BizException(400, "Username is required");
-        if (password == null || password.isBlank()) throw new BizException(400, "Password is required");
+        if (username == null || username.isBlank()) throw new BizException(ResultCode.BAD_REQUEST, "Username is required");
+        if (password == null || password.isBlank()) throw new BizException(ResultCode.BAD_REQUEST, "Password is required");
 
         Long count = userMapper.selectCount(
                 new LambdaQueryWrapper<UserDO>().eq(UserDO::getUsername, username));
-        if (count > 0) throw new BizException(400, "Username already exists");
+        if (count > 0) throw new BizException(ResultCode.BAD_REQUEST, "Username already exists");
 
         UserDO user = new UserDO();
         user.setUsername(username);
         user.setPassword(passwordUtil.encode(password));
         user.setNickname(username);
-        user.setStatus(1);
+        user.setStatus(CommonStatus.ENABLED);
         userMapper.insert(user);
         return UserVO.from(user);
     }
@@ -67,9 +69,9 @@ public class AuthServiceImpl implements AuthService {
     public TokenVO login(String username, String password) {
         UserDO user = userMapper.selectOne(
                 new LambdaQueryWrapper<UserDO>().eq(UserDO::getUsername, username));
-        if (user == null) throw new BizException(401, "Invalid credentials");
+        if (user == null) throw new BizException(ResultCode.UNAUTHORIZED, "Invalid credentials");
         if (user.getPassword() == null || !passwordUtil.matches(password, user.getPassword())) {
-            throw new BizException(401, "Invalid credentials");
+            throw new BizException(ResultCode.UNAUTHORIZED, "Invalid credentials");
         }
         return generateTokenPair(user.getId());
     }
@@ -85,7 +87,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public TokenVO refresh(String refreshToken) {
         if (refreshToken == null || !jwtUtil.isTokenValid(refreshToken) || !jwtUtil.isRefreshToken(refreshToken)) {
-            throw new BizException(401, "Invalid refresh token");
+            throw new BizException(ResultCode.UNAUTHORIZED, "Invalid refresh token");
         }
         Long userId = jwtUtil.getUserId(refreshToken);
         return generateTokenPair(userId);

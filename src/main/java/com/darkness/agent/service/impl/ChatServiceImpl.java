@@ -11,7 +11,10 @@ import com.darkness.agent.mapper.MessageMapper;
 import com.darkness.agent.model.ConversationVO;
 import com.darkness.agent.model.MessageVO;
 import com.darkness.agent.service.ChatService;
+import com.darkness.common.enums.MessageRole;
 import com.darkness.common.exception.BizException;
+import com.darkness.common.result.ResultCode;
+import com.darkness.common.util.ServiceHelper;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -90,9 +93,8 @@ public class ChatServiceImpl implements ChatService {
     @Override
     public List<MessageVO> getMessages(Long conversationId, Long userId) {
         // 校验会话归属，防止 IDOR 越权读取他人消息
-        ConversationDO conv = conversationMapper.selectById(conversationId);
-        if (conv == null) throw new BizException(404, "Conversation not found");
-        if (!conv.getUserId().equals(userId)) throw new BizException(403, "Forbidden");
+        ConversationDO conv = ServiceHelper.findOrThrow(conversationMapper.selectById(conversationId), "Conversation", conversationId);
+        if (!conv.getUserId().equals(userId)) throw new BizException(ResultCode.FORBIDDEN, "Forbidden");
 
         return messageMapper.selectList(
                 new LambdaQueryWrapper<MessageDO>()
@@ -109,9 +111,8 @@ public class ChatServiceImpl implements ChatService {
      */
     @Override
     public void deleteConversation(Long conversationId, Long userId) {
-        ConversationDO conv = conversationMapper.selectById(conversationId);
-        if (conv == null) throw new BizException(404, "Conversation not found");
-        if (!conv.getUserId().equals(userId)) throw new BizException(403, "Forbidden");
+        ConversationDO conv = ServiceHelper.findOrThrow(conversationMapper.selectById(conversationId), "Conversation", conversationId);
+        if (!conv.getUserId().equals(userId)) throw new BizException(ResultCode.FORBIDDEN, "Forbidden");
         conversationMapper.deleteById(conversationId);
     }
 
@@ -134,17 +135,15 @@ public class ChatServiceImpl implements ChatService {
     @Override
     public SseEmitter sendMessage(Long userId, Long conversationId, String content) {
         // 校验会话归属
-        ConversationDO conv = conversationMapper.selectById(conversationId);
-        if (conv == null) throw new BizException(404, "Conversation not found");
-        if (!conv.getUserId().equals(userId)) throw new BizException(403, "Forbidden");
+        ConversationDO conv = ServiceHelper.findOrThrow(conversationMapper.selectById(conversationId), "Conversation", conversationId);
+        if (!conv.getUserId().equals(userId)) throw new BizException(ResultCode.FORBIDDEN, "Forbidden");
 
-        AgentDO agent = agentMapper.selectById(conv.getAgentId());
-        if (agent == null) throw new BizException(404, "Agent not found");
+        AgentDO agent = ServiceHelper.findOrThrow(agentMapper.selectById(conv.getAgentId()), "Agent", conv.getAgentId());
 
         // 持久化用户消息
         MessageDO userMsg = new MessageDO();
         userMsg.setConversationId(conversationId);
-        userMsg.setRole("user");
+        userMsg.setRole(MessageRole.USER);
         userMsg.setContent(content);
         messageMapper.insert(userMsg);
 
@@ -172,7 +171,7 @@ public class ChatServiceImpl implements ChatService {
                             // 持久化助手回复
                             MessageDO assistantMsg = new MessageDO();
                             assistantMsg.setConversationId(conversationId);
-                            assistantMsg.setRole("assistant");
+                            assistantMsg.setRole(MessageRole.ASSISTANT);
                             assistantMsg.setContent(fullResponse.toString());
                             messageMapper.insert(assistantMsg);
                             emitter.complete();

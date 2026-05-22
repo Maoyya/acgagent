@@ -7,7 +7,10 @@ import com.darkness.auth.mapper.SmsCodeMapper;
 import com.darkness.auth.model.TokenVO;
 import com.darkness.auth.service.AuthService;
 import com.darkness.auth.service.SmsService;
+import com.darkness.common.enums.CommonStatus;
+import com.darkness.common.enums.UsedStatus;
 import com.darkness.common.exception.BizException;
+import com.darkness.common.result.ResultCode;
 import com.darkness.user.entity.UserDO;
 import com.darkness.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
@@ -39,21 +42,21 @@ public class SmsServiceImpl implements SmsService {
 
     /**
      * 向指定手机号发送 6 位随机数字验证码。
-     * 生成验证码后写入 sms_code 表（used=0，expiredAt=当前时间+5分钟），
+     * 生成验证码后写入 sms_code 表（used=UNUSED，expiredAt=当前时间+5分钟），
      * mock 模式下仅输出到日志，方便本地开发调试。
      *
      * @param phone 手机号，不能为空
      */
     @Override
     public void sendCode(String phone) {
-        if (phone == null || phone.isBlank()) throw new BizException(400, "Phone number is required");
+        if (phone == null || phone.isBlank()) throw new BizException(ResultCode.BAD_REQUEST, "Phone number is required");
 
         String code = String.format("%06d", new Random().nextInt(1000000));
 
         SmsCodeDO smsCode = new SmsCodeDO();
         smsCode.setPhone(phone);
         smsCode.setCode(code);
-        smsCode.setUsed(0);
+        smsCode.setUsed(UsedStatus.UNUSED);
         // 验证码 5 分钟后过期
         smsCode.setExpiredAt(LocalDateTime.now().plusMinutes(5));
         smsCodeMapper.insert(smsCode);
@@ -68,8 +71,8 @@ public class SmsServiceImpl implements SmsService {
 
     /**
      * 短信验证码登录。
-     * 查询该手机号未使用（used=0）且未过期（expiredAt > 当前时间）的验证码记录，
-     * 验证码无效或已过期时抛出 BizException(401)。验证通过后标记 used=1 防止重复消费。
+     * 查询该手机号未使用且未过期的验证码记录，
+     * 验证码无效或已过期时抛出 BizException(401)。验证通过后标记 used=USED 防止重复消费。
      * 若手机号未注册则自动创建用户（昵称取 "user_" + 手机号后四位），最后签发 Token 对。
      *
      * @param phone 手机号
@@ -78,23 +81,23 @@ public class SmsServiceImpl implements SmsService {
      */
     @Override
     public TokenVO login(String phone, String code) {
-        if (phone == null || code == null) throw new BizException(400, "Phone and code are required");
+        if (phone == null || code == null) throw new BizException(ResultCode.BAD_REQUEST, "Phone and code are required");
 
         // 查询未使用且未过期的验证码
         SmsCodeDO smsCode = smsCodeMapper.selectOne(
                 new LambdaQueryWrapper<SmsCodeDO>()
                         .eq(SmsCodeDO::getPhone, phone)
                         .eq(SmsCodeDO::getCode, code)
-                        .eq(SmsCodeDO::getUsed, 0)
+                        .eq(SmsCodeDO::getUsed, UsedStatus.UNUSED)
                         .gt(SmsCodeDO::getExpiredAt, LocalDateTime.now())
                         .orderByDesc(SmsCodeDO::getCreatedAt)
                         .last("LIMIT 1"));
 
-        if (smsCode == null) throw new BizException(401, "Invalid or expired verification code");
+        if (smsCode == null) throw new BizException(ResultCode.UNAUTHORIZED, "Invalid or expired verification code");
 
         // 标记验证码已使用，防止重复使用
         smsCodeMapper.update(null,
-                new LambdaUpdateWrapper<SmsCodeDO>().eq(SmsCodeDO::getId, smsCode.getId()).set(SmsCodeDO::getUsed, 1));
+                new LambdaUpdateWrapper<SmsCodeDO>().eq(SmsCodeDO::getId, smsCode.getId()).set(SmsCodeDO::getUsed, UsedStatus.USED));
 
         UserDO user = userMapper.selectOne(
                 new LambdaQueryWrapper<UserDO>().eq(UserDO::getPhone, phone));
@@ -103,7 +106,7 @@ public class SmsServiceImpl implements SmsService {
             user = new UserDO();
             user.setPhone(phone);
             user.setNickname("user_" + phone.substring(Math.max(0, phone.length() - 4)));
-            user.setStatus(1);
+            user.setStatus(CommonStatus.ENABLED);
             userMapper.insert(user);
         }
 
