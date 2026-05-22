@@ -16,6 +16,10 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+/**
+ * 角色业务实现层。基于 MyBatis-Plus 实现角色 CRUD 与权限分配逻辑，
+ * 查询/更新/删除时校验记录是否存在，不存在则抛出 BizException(404)。
+ */
 @Service
 @RequiredArgsConstructor
 public class RoleServiceImpl implements RoleService {

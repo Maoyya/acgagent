@@ -10,6 +10,10 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+/**
+ * 权限业务实现层。基于 MyBatis-Plus 实现权限 CRUD 逻辑，
+ * 查询/更新/删除时校验记录是否存在，不存在则抛出 BizException(404)。
+ */
 @Service
 @RequiredArgsConstructor
 public class PermissionServiceImpl implements PermissionService {
