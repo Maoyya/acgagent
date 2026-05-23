@@ -8,14 +8,4 @@ spring:
     nacos:
       server-addr: ${NACOS_ADDR:localhost:8848}
       discovery:
-        enabled: false
         namespace: acg_agent
-      config:
-        enabled: false
-        namespace: acg_agent
-        shared-configs:
-          - data-id: common-jwt.yaml
-            refresh: true
-        extension-configs:
-          - data-id: acg-gateway.yaml
-            refresh: true

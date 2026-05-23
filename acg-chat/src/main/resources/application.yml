@@ -5,7 +5,7 @@ spring:
       - nacos:common-mysql.yaml?group=DEFAULT_GROUP&refresh=true
       - nacos:common-dubbo.yaml?group=DEFAULT_GROUP&refresh=true
       - nacos:common-jwt.yaml?group=DEFAULT_GROUP&refresh=true
-      - nacos:acg-user.yaml?group=DEFAULT_GROUP&refresh=true
+      - nacos:acg-chat.yaml?group=DEFAULT_GROUP&refresh=true
   cloud:
     nacos:
       config:

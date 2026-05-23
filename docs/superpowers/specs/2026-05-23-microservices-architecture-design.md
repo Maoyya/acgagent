@@ -24,7 +24,7 @@
 | 决策项 | 选择 | 理由 |
 |---|---|---|
 | 仓库策略 | Maven 多模块单仓库 | 小团队，代码集中管理，统一构建 |
-| 模块划分 | 5 模块（common + api + gateway + user + agent） | Dubbo 接口契约层独立，服务间调用规范清晰 |
+| 模块划分 | 5 模块（common + api + gateway + user + chat） | Dubbo 接口契约层独立，服务间调用规范清晰 |
 | 数据库 | 共享 `acg_agent` 数据库 | 当前规模不需要分库，降低复杂度 |
 | 网关鉴权 | Gateway 本地 JWT 验签 | 简单高效，无额外 RPC 开销 |
 | 限流方案 | Sentinel | 与 Nacos/Dubbo 同生态，熔断 + 限流统一组件 |
@@ -77,7 +77,7 @@ acgagent/
 │   ├── dubbo/                       — UserFacadeImpl（@DubboService）
 │   └── Application.java            — 启动类
 │
-├── acg-agent/                       — Agent + 对话服务 :8082
+├── acg-chat/                        — Agent + 对话服务 :8082
 │   ├── config/                      — MyBatisPlusConfig, WebClientConfig
 │   ├── controller/                  — AgentController, ChatController
 │   ├── service/                     — AgentService, ChatService
@@ -89,19 +89,19 @@ acgagent/
     ├── docker-compose.yml
     ├── gateway/Dockerfile
     ├── user/Dockerfile
-    └── agent/Dockerfile
+    └── chat/Dockerfile
 ```
 
 ### 依赖关系
 
 ```
 acg-common ← acg-api ← acg-user（实现Facade）
-                      ← acg-agent（引用Facade）
+                      ← acg-chat（引用Facade）
          ← acg-gateway（JWT工具类）
 ```
 
 - `acg-common` 被所有模块依赖
-- `acg-api` 被 `acg-user`、`acg-agent` 依赖
+- `acg-api` 被 `acg-user`、`acg-chat` 依赖
 - `acg-gateway` 仅依赖 `acg-common`
 - 各服务之间无直接依赖，通过 Dubbo RPC 通信
 
@@ -166,7 +166,7 @@ spring:
             - Path=/api/auth/**,/api/users/**,/api/roles/**,/api/permissions/**
 
         - id: agent-service
-          uri: lb://acg-agent
+          uri: lb://acg-chat
           predicates:
             - Path=/api/agents/**,/api/chat/**
 
@@ -224,7 +224,7 @@ Nacos namespace: acg_agent
 │
 ├── acg-gateway.yaml             — 网关独立配置（路由规则、白名单）
 ├── acg-user.yaml                — 用户服务独立配置（SMS、微信）
-└── acg-agent.yaml               — Agent 服务独立配置（外部 API 地址）
+└── acg-chat.yaml                — Agent 服务独立配置（外部 API 地址）
 ```
 
 ### 本地最小配置（bootstrap.yml）
@@ -258,7 +258,7 @@ spring:
 | MySQL | 3306 | 共享数据库 |
 | acg-gateway | 8080 | 唯一对外入口 |
 | acg-user | 8081 | 用户 + 认证服务 |
-| acg-agent | 8082 | Agent + 对话服务 |
+| acg-chat | 8082 | Agent + 对话服务 |
 | Dubbo RPC | 20881/20882 | 各服务 Dubbo 端口 |
 
 ## 8. 可观测性与容错
@@ -295,7 +295,7 @@ spring:
 | sentinel-dashboard | 8858 | 限流/熔断规则管理 |
 | acg-gateway | 8080 | 网关 |
 | acg-user | 8081 | 用户服务 |
-| acg-agent | 8082 | Agent 服务 |
+| acg-chat | 8082 | Agent 服务 |
 
 ### Docker Compose 编排
 
@@ -336,7 +336,7 @@ services:
     environment:
       NACOS_ADDR: nacos:8848
       JWT_SECRET: ${JWT_SECRET}
-    depends_on: [nacos, acg-user, acg-agent]
+    depends_on: [nacos, acg-user, acg-chat]
 
   acg-user:
     build: { context: .., dockerfile: docker/user/Dockerfile }
@@ -346,8 +346,8 @@ services:
       JWT_SECRET: ${JWT_SECRET}
     depends_on: [nacos, mysql]
 
-  acg-agent:
-    build: { context: .., dockerfile: docker/agent/Dockerfile }
+  acg-chat:
+    build: { context: .., dockerfile: docker/chat/Dockerfile }
     environment:
       NACOS_ADDR: nacos:8848
       MYSQL_HOST: mysql
@@ -363,10 +363,10 @@ volumes:
 FROM eclipse-temurin:21-jdk AS build
 WORKDIR /app
 COPY . .
-RUN mvn clean package -pl acg-agent -am -DskipTests
+RUN mvn clean package -pl acg-chat -am -DskipTests
 
 FROM eclipse-temurin:21-jre
-COPY --from=build /app/acg-agent/target/*.jar app.jar
+COPY --from=build /app/acg-chat/target/*.jar app.jar
 ENTRYPOINT ["java", "-jar", "app.jar"]
 ```
 
@@ -375,7 +375,7 @@ ENTRYPOINT ["java", "-jar", "app.jar"]
 ### 启动顺序
 
 ```
-MySQL → Nacos → acg-user, acg-agent（并行） → acg-gateway
+MySQL → Nacos → acg-user, acg-chat（并行） → acg-gateway
 ```
 
 ### 开发环境
@@ -417,7 +417,7 @@ MySQL → Nacos → acg-user, acg-agent（并行） → acg-gateway
 - Controller 中获取当前用户改为从 `X-User-Id` header 读取
 - 新增 `UserContext` 工具类
 
-### acg-agent
+### acg-chat
 
 - 移入 `agent/` 下 Controller、Service、Client（Entity、Mapper、Model 已在 common）
 - 移入 `config/MyBatisPlusConfig`（每个服务独立配置）

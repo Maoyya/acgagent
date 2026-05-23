@@ -10,9 +10,9 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>acg-agent</artifactId>
+    <artifactId>acg-chat</artifactId>
     <packaging>jar</packaging>
-    <description>Agent 服务模块：AI Agent 管理、对话、SSE 流式调用，Dubbo 提供者</description>
+    <description>Chat 服务模块：AI Agent 管理、对话、SSE 流式调用，Dubbo 提供者</description>
 
     <dependencies>
         <dependency>

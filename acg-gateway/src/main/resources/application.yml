@@ -1,30 +1,10 @@
+# 本地只保留与代码结构绑定的配置，其余全部由 Nacos 提供
 spring:
-  autoconfigure:
-    exclude:
-      - com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration
-      - com.baomidou.mybatisplus.autoconfigure.MybatisPlusLanguageDriverAutoConfiguration
-      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
-      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
+  config:
+    import:
+      - nacos:common-jwt.yaml?group=DEFAULT_GROUP&refresh=true
+      - nacos:acg-gateway.yaml?group=DEFAULT_GROUP&refresh=true
   cloud:
-    gateway:
-      routes:
-        - id: user-service
-          uri: http://localhost:8081
-          predicates:
-            - Path=/api/auth/**,/api/users/**,/api/roles/**,/api/permissions/**,/druid/**
-
-        - id: agent-service
-          uri: http://localhost:8082
-          predicates:
-            - Path=/api/agents/**,/api/chat/**
-
-jwt:
-  secret: ${JWT_SECRET:acgagent-jwt-secret-key-must-be-at-least-256-bits-long-for-hs256}
-
-management:
-  tracing:
-    sampling:
-      probability: ${ZIPKIN_SAMPLING:1.0}
-  zipkin:
-    tracing:
-      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
+    nacos:
+      config:
+        namespace: acg_agent

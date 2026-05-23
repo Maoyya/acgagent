@@ -49,10 +49,10 @@ services:
       - nacos
       - mysql
 
-  acg-agent:
+  acg-chat:
     build:
       context: ..
-      dockerfile: docker/agent/Dockerfile
+      dockerfile: docker/chat/Dockerfile
     ports:
       - "8082:8082"
     environment:
@@ -75,7 +75,7 @@ services:
     depends_on:
       - nacos
       - acg-user
-      - acg-agent
+      - acg-chat
 
 volumes:
   mysql-data:

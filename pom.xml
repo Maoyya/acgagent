@@ -21,7 +21,7 @@
         <module>acg-api</module>
         <module>acg-gateway</module>
         <module>acg-user</module>
-        <module>acg-agent</module>
+        <module>acg-chat</module>
     </modules>
 
     <properties>
