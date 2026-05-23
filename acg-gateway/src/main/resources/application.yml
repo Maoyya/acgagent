@@ -1,14 +1,20 @@
 spring:
+  autoconfigure:
+    exclude:
+      - com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration
+      - com.baomidou.mybatisplus.autoconfigure.MybatisPlusLanguageDriverAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
   cloud:
     gateway:
       routes:
         - id: user-service
-          uri: lb://acg-user
+          uri: http://localhost:8081
           predicates:
             - Path=/api/auth/**,/api/users/**,/api/roles/**,/api/permissions/**,/druid/**
 
         - id: agent-service
-          uri: lb://acg-agent
+          uri: http://localhost:8082
           predicates:
             - Path=/api/agents/**,/api/chat/**
 

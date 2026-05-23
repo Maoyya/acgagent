@@ -53,7 +53,7 @@ dubbo:
     name: tri
     port: 20881
   registry:
-    address: nacos://${spring.cloud.nacos.server-addr}?namespace=acg_agent
+    address: N/A
   scan:
     base-packages: com.darkness.user.dubbo
 

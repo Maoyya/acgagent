@@ -2,6 +2,7 @@ package com.darkness.user.controller;
 
 import com.darkness.common.result.Result;
 import com.darkness.common.model.UserVO;
+import com.darkness.common.util.UserContext;
 import com.darkness.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -18,6 +19,18 @@ import java.util.List;
 public class UserController {
 
     private final UserService userService;
+
+    /**
+     * 获取当前登录用户信息。从 Gateway 传递的 X-User-Id header 中提取用户 ID。
+     * GET /api/users/me（需认证）
+     *
+     * @return 当前用户视图对象（不含密码）
+     */
+    @GetMapping("/me")
+    public Result<UserVO> getCurrentUser() {
+        Long userId = UserContext.getUserId();
+        return Result.success(userService.getUserById(userId));
+    }
 
     /**
      * 根据 ID 查询用户详情，不存在时抛出 404。

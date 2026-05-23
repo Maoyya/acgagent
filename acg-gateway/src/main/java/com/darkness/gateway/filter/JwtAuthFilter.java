@@ -15,6 +15,7 @@ import reactor.core.publisher.Mono;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.util.regex.Pattern;
 
 /**
  * Gateway JWT 鉴权全局过滤器。
@@ -32,6 +33,19 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             "/druid/"
     };
 
+    /** Agent 详情路径正则，预编译避免每次请求重新编译 */
+    private static final Pattern AGENT_ID_PATH = Pattern.compile("^/api/agents/\\d+$");
+
+    /** 缓存的签名密钥，初始化后不再重新生成 */
+    private volatile SecretKey signingKey;
+
+    private SecretKey getSigningKey() {
+        if (signingKey == null) {
+            signingKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        }
+        return signingKey;
+    }
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getPath().value();
@@ -43,7 +57,7 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
 
         // GET /api/agents 和 GET /api/agents/{id} 放行
         if ("GET".equals(exchange.getRequest().getMethod().name())
-                && (path.equals("/api/agents") || path.matches("^/api/agents/\\d+$"))) {
+                && (path.equals("/api/agents") || AGENT_ID_PATH.matcher(path).matches())) {
             return chain.filter(exchange);
         }
 
@@ -79,9 +93,8 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
     }
 
     private Claims parseToken(String token) {
-        SecretKey key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         return Jwts.parser()
-                .verifyWith(key)
+                .verifyWith(getSigningKey())
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
