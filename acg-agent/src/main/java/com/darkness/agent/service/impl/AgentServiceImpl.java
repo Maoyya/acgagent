@@ -3,7 +3,7 @@ package com.darkness.agent.service.impl;
 import com.darkness.common.constant.AgentConstants;
 import com.darkness.common.entity.AgentDO;
 import com.darkness.common.mapper.AgentMapper;
-import com.darkness.agent.model.AgentVO;
+import com.darkness.common.model.AgentVO;
 import com.darkness.agent.service.AgentService;
 import com.darkness.common.util.ServiceHelper;
 import lombok.RequiredArgsConstructor;

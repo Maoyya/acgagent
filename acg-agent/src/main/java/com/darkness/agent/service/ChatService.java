@@ -1,7 +1,7 @@
 package com.darkness.agent.service;
 
-import com.darkness.agent.model.ConversationVO;
-import com.darkness.agent.model.MessageVO;
+import com.darkness.common.model.ConversationVO;
+import com.darkness.common.model.MessageVO;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;

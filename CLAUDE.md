@@ -15,8 +15,6 @@ mvn clean compile
 mvn test
 ```
 
-项目没有 Maven Wrapper（`mvnw`），使用系统安装的 Maven。Maven 路径：`D:\apache-maven-3.9.9-bin\apache-maven-3.9.9\bin`，JAVA_HOME：`D:\jdk\jdk21`。
-
 ## 技术架构
 
 Spring Boot 3.3.5 单体应用，Java 21。Spring Security + JWT 认证，MyBatis-Plus ORM，Druid 连接池，WebClient（Agent SSE 流式）。

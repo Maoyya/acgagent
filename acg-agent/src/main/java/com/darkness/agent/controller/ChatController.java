@@ -1,9 +1,9 @@
 package com.darkness.agent.controller;
 
-import com.darkness.agent.model.ConversationVO;
-import com.darkness.agent.model.CreateConversationRequest;
-import com.darkness.agent.model.MessageVO;
-import com.darkness.agent.model.SendMessageRequest;
+import com.darkness.common.model.ConversationVO;
+import com.darkness.common.model.CreateConversationRequest;
+import com.darkness.common.model.MessageVO;
+import com.darkness.common.model.SendMessageRequest;
 import com.darkness.agent.service.ChatService;
 import com.darkness.common.result.Result;
 import com.darkness.common.util.UserContext;

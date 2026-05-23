@@ -1,6 +1,6 @@
 package com.darkness.agent.controller;
 
-import com.darkness.agent.model.AgentVO;
+import com.darkness.common.model.AgentVO;
 import com.darkness.agent.service.AgentService;
 import com.darkness.common.result.Result;
 import lombok.RequiredArgsConstructor;

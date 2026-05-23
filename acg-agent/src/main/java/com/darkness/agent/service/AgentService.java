@@ -1,6 +1,6 @@
 package com.darkness.agent.service;
 
-import com.darkness.agent.model.AgentVO;
+import com.darkness.common.model.AgentVO;
 
 import java.util.List;
 
