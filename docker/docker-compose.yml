@@ -1,0 +1,81 @@
+services:
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: acg_agent
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ../acg-user/src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      retries: 5
+
+  nacos:
+    image: nacos/nacos-server:v2.4.3
+    ports:
+      - "8848:8848"
+    environment:
+      MODE: standalone
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  zipkin:
+    image: openzipkin/zipkin:latest
+    ports:
+      - "9411:9411"
+
+  sentinel-dashboard:
+    image: bladex/sentinel-dashboard:1.8.8
+    ports:
+      - "8858:8858"
+
+  acg-user:
+    build:
+      context: ..
+      dockerfile: docker/user/Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      NACOS_ADDR: nacos:8848
+      MYSQL_HOST: mysql
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      JWT_SECRET: ${JWT_SECRET:-acgagent-jwt-secret-key-must-be-at-least-256-bits-long-for-hs256}
+    depends_on:
+      - nacos
+      - mysql
+
+  acg-agent:
+    build:
+      context: ..
+      dockerfile: docker/agent/Dockerfile
+    ports:
+      - "8082:8082"
+    environment:
+      NACOS_ADDR: nacos:8848
+      MYSQL_HOST: mysql
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+    depends_on:
+      - nacos
+      - mysql
+
+  acg-gateway:
+    build:
+      context: ..
+      dockerfile: docker/gateway/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      NACOS_ADDR: nacos:8848
+      JWT_SECRET: ${JWT_SECRET:-acgagent-jwt-secret-key-must-be-at-least-256-bits-long-for-hs256}
+    depends_on:
+      - nacos
+      - acg-user
+      - acg-agent
+
+volumes:
+  mysql-data:

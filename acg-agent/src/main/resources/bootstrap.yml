@@ -1,0 +1,21 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: acg-agent
+  cloud:
+    nacos:
+      server-addr: ${NACOS_ADDR:localhost:8848}
+      discovery:
+        namespace: acg_agent
+      config:
+        namespace: acg_agent
+        shared-configs:
+          - data-id: common-mysql.yaml
+            refresh: true
+          - data-id: common-dubbo.yaml
+            refresh: true
+        extension-configs:
+          - data-id: acg-agent.yaml
+            refresh: true
