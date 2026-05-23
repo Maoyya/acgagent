@@ -203,11 +203,37 @@ Gateway 统一鉴权，下游服务不再使用 Spring Security：
 
 ### Nacos 配置管理
 
-各服务通过 `bootstrap.yml` 从 Nacos 拉取共享配置：
-- `common-mysql.yaml` — MySQL + Druid 连接池
-- `common-dubbo.yaml` — Dubbo 协议与注册中心
-- `common-jwt.yaml` — JWT secret 和过期时间
-- `acg-user.yaml` / `acg-chat.yaml` / `acg-gateway.yaml` — 服务专属配置
+各服务通过 `bootstrap.yml` 从 Nacos 拉取共享配置（命名空间 `acg_agent`，分组 `DEFAULT_GROUP`）：
+
+| dataId | 说明 |
+|---|---|
+| `common-mysql.yaml` | MySQL + Druid + MyBatis-Plus 共享配置 |
+| `common-dubbo.yaml` | Dubbo 协议与注册中心 |
+| `common-jwt.yaml` | JWT secret 和过期时间 |
+| `acg-user.yaml` | acg-user 专属：Druid 监控、Dubbo 协议、微信/短信、Zipkin |
+| `acg-chat.yaml` | acg-chat 专属：Dubbo 协议/消费者、Zipkin |
+| `acg-gateway.yaml` | Gateway 路由规则 |
+
+`docx/nacos_config/` 目录包含 Nacos 导出的配置示例（含 Dubbo 服务注册元数据），可作为配置参考。初次部署需在 Nacos 控制台手动创建以上 6 个 YAML 配置，详见 `docx/本地启动指南.md`。
+
+### 前端项目
+
+前端项目位于 `D:\vscodeproject\acgagent-web`，Vue 3 + TypeScript + Vite + Element Plus。
+
+- 所有 API 请求通过 Vite 代理（`/api` → `http://localhost:8080`）转发到 Gateway
+- 认证使用 JWT（`accessToken` 存储在 `localStorage`，请求头 `Authorization: Bearer <token>`）
+- SSE 流式对话接口（`POST /api/chat/conversations/{id}/send`）使用 `fetch` API，不走 Axios
+- API 对接详情见 `docx/前端对接指南.md`
+
+### 文档索引
+
+| 文件 | 说明 |
+|---|---|
+| `docx/本地启动指南.md` | 本地环境搭建、服务启动/停止、IDEA 启动方式 |
+| `docx/前端对接指南.md` | 前端 API 对接文档，含接口详情、TypeScript 类型、对接注意事项 |
+| `docx/技术架构.md` | 系统架构设计文档 |
+| `docx/业务流程.md` | 业务流程说明 |
+| `docx/nacos_config/` | Nacos 配置示例（Dubbo 服务注册元数据） |
 
 ### MyBatis-Plus 约定
 
