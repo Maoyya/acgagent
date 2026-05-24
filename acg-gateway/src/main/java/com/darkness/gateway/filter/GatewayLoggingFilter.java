@@ -11,6 +11,7 @@ import org.springframework.core.io.buffer.DataBufferFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.http.server.reactive.ServerHttpResponseDecorator;
 import org.springframework.stereotype.Component;
@@ -77,7 +78,7 @@ public class GatewayLoggingFilter implements GlobalFilter, Ordered {
             }
         };
 
-        // 读取请求体
+        // 读取请求体后通过 ServerHttpRequestDecorator 重新包装，避免下游服务收不到 body
         return request.getBody()
                 .reduce(new ArrayList<DataBuffer>(), (list, buf) -> { list.add(buf); return list; })
                 .defaultIfEmpty(new ArrayList<>())
@@ -91,6 +92,20 @@ public class GatewayLoggingFilter implements GlobalFilter, Ordered {
                             offset += len;
                         }
                         log.info(">>> Body: {}", truncate(new String(bytes, StandardCharsets.UTF_8)));
+
+                        // 用读取的内容构造新的请求体，让下游能正常消费
+                        DataBufferFactory factory = exchange.getResponse().bufferFactory();
+                        DataBuffer newBuffer = factory.wrap(bytes);
+                        ServerHttpRequest decoratedRequest = new ServerHttpRequestDecorator(request) {
+                            @Override
+                            public Flux<DataBuffer> getBody() {
+                                return Flux.just(newBuffer);
+                            }
+                        };
+                        return chain.filter(exchange.mutate()
+                                .request(decoratedRequest)
+                                .response(decoratedResponse)
+                                .build());
                     }
                     return chain.filter(exchange.mutate().response(decoratedResponse).build());
                 });

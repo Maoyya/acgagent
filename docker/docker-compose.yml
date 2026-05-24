@@ -9,7 +9,8 @@ services:
       MYSQL_DATABASE: acg_agent
     volumes:
       - mysql-data:/var/lib/mysql
-      - ../acg-user/src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/init.sql
+      - ../acg-user/src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./init/nacos-schema.sql:/docker-entrypoint-initdb.d/02-nacos.sql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
@@ -22,6 +23,12 @@ services:
       - "9848:9848"
     environment:
       MODE: standalone
+      SPRING_DATASOURCE_PLATFORM: mysql
+      MYSQL_SERVICE_HOST: mysql
+      MYSQL_SERVICE_PORT: 3306
+      MYSQL_SERVICE_DB_NAME: nacos
+      MYSQL_SERVICE_USER: root
+      MYSQL_SERVICE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
     depends_on:
       mysql:
         condition: service_healthy
