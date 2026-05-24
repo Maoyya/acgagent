@@ -1,0 +1,8 @@
+dubbo:
+  config-center:
+    address: nacos://${spring.cloud.nacos.server-addr}?namespace=acg_agent
+    group: DUBBO_GROUP
+    highest-priority: false
+  registry:
+    address: nacos://${spring.cloud.nacos.server-addr}?namespace=acg_agent&group=DUBBO_GROUP
+    group: DUBBO_GROUP
