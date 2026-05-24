@@ -18,6 +18,7 @@ services:
     image: nacos/nacos-server:v2.4.3
     ports:
       - "8848:8848"
+      - "9848:9848"
     environment:
       MODE: standalone
     depends_on:
