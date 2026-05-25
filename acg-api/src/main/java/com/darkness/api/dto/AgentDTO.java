@@ -10,7 +10,7 @@ import java.io.Serializable;
 @Data
 public class AgentDTO implements Serializable {
 
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 7382194683720194857L;
 
     /** Agent ID */
     private Long id;

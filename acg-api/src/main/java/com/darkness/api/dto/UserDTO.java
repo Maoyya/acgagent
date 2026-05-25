@@ -10,7 +10,7 @@ import java.io.Serializable;
 @Data
 public class UserDTO implements Serializable {
 
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 5928473019284756103L;
 
     /** 用户 ID */
     private Long id;
