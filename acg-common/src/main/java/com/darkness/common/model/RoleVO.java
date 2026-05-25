@@ -2,6 +2,8 @@ package com.darkness.common.model;
 
 import com.darkness.common.entity.RoleDO;
 import com.darkness.common.enums.CommonStatus;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -16,9 +18,13 @@ public class RoleVO {
     private Long id;
 
     /** 角色名称，如 "管理员"、"普通用户" */
+    @NotBlank(message = "角色名称不能为空")
+    @Size(max = 64, message = "角色名称长度不能超过64个字符")
     private String name;
 
     /** 角色编码，唯一标识，如 "admin"、"user" */
+    @NotBlank(message = "角色编码不能为空")
+    @Size(max = 64, message = "角色编码长度不能超过64个字符")
     private String code;
 
     /** 排序值，数值越小越靠前 */
@@ -28,6 +34,7 @@ public class RoleVO {
     private CommonStatus status;
 
     /** 备注说明 */
+    @Size(max = 256, message = "备注长度不能超过256个字符")
     private String remark;
 
     /** 创建时间 */

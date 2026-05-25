@@ -3,6 +3,8 @@ package com.darkness.common.model;
 import com.darkness.common.constant.AgentConstants;
 import com.darkness.common.entity.AgentDO;
 import com.darkness.common.enums.CommonStatus;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -17,21 +19,30 @@ public class AgentVO {
     private Long id;
 
     /** 智能体名称，用于前端展示 */
+    @NotBlank(message = "智能体名称不能为空")
+    @Size(max = 128, message = "智能体名称长度不能超过128个字符")
     private String name;
 
     /** 智能体功能描述 */
+    @Size(max = 512, message = "描述长度不能超过512个字符")
     private String description;
 
     /** 头像图片 URL */
+    @Size(max = 512, message = "头像URL长度不能超过512个字符")
     private String avatar;
 
     /** 外部 LLM API 的完整地址 */
+    @NotBlank(message = "API地址不能为空")
+    @Size(max = 512, message = "API地址长度不能超过512个字符")
     private String apiUrl;
 
     /** API 密钥，前端展示时已脱敏为 "******"，更新时若仍为 "******" 则保留原值不变 */
+    @NotBlank(message = "API密钥不能为空")
+    @Size(max = 512, message = "API密钥长度不能超过512个字符")
     private String apiKey;
 
     /** 模型标识，如 gpt-4、claude-3-sonnet 等 */
+    @Size(max = 128, message = "模型标识长度不能超过128个字符")
     private String model;
 
     /** 状态：ENABLED-启用，DISABLED-禁用 */

@@ -3,6 +3,7 @@ package com.darkness.user.controller;
 import com.darkness.common.result.Result;
 import com.darkness.common.model.PermissionVO;
 import com.darkness.user.service.PermissionService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -50,7 +51,7 @@ public class PermissionController {
      * @return 创建后的权限视图对象
      */
     @PostMapping
-    public Result<PermissionVO> createPermission(@RequestBody PermissionVO vo) {
+    public Result<PermissionVO> createPermission(@Valid @RequestBody PermissionVO vo) {
         return Result.success(permissionService.createPermission(vo));
     }
 
@@ -63,7 +64,7 @@ public class PermissionController {
      * @return 更新后的权限视图对象
      */
     @PutMapping("/{id}")
-    public Result<PermissionVO> updatePermission(@PathVariable Long id, @RequestBody PermissionVO vo) {
+    public Result<PermissionVO> updatePermission(@PathVariable Long id, @Valid @RequestBody PermissionVO vo) {
         return Result.success(permissionService.updatePermission(id, vo));
     }
 

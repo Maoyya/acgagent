@@ -4,6 +4,7 @@ import com.darkness.common.result.Result;
 import com.darkness.common.model.UserVO;
 import com.darkness.common.util.UserContext;
 import com.darkness.user.service.UserService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -63,7 +64,7 @@ public class UserController {
      * @return 创建后的用户视图对象
      */
     @PostMapping
-    public Result<UserVO> createUser(@RequestBody UserVO vo) {
+    public Result<UserVO> createUser(@Valid @RequestBody UserVO vo) {
         return Result.success(userService.createUser(vo));
     }
 
@@ -76,7 +77,7 @@ public class UserController {
      * @return 更新后的用户视图对象
      */
     @PutMapping("/{id}")
-    public Result<UserVO> updateUser(@PathVariable Long id, @RequestBody UserVO vo) {
+    public Result<UserVO> updateUser(@PathVariable Long id, @Valid @RequestBody UserVO vo) {
         return Result.success(userService.updateUser(id, vo));
     }
 

@@ -1,6 +1,7 @@
 package com.darkness.common.model;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
@@ -8,6 +9,7 @@ import lombok.Data;
  */
 @Data
 public class RefreshTokenRequest {
-    @NotBlank(message = "Refresh token is required")
+    @NotBlank(message = "刷新令牌不能为空")
+    @Size(max = 2048, message = "令牌长度不能超过2048个字符")
     private String refreshToken;
 }

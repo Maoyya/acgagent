@@ -2,6 +2,9 @@ package com.darkness.common.model;
 
 import com.darkness.common.entity.UserDO;
 import com.darkness.common.enums.CommonStatus;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -17,18 +20,25 @@ public class UserVO {
     private Long id;
 
     /** 登录用户名，唯一 */
+    @Size(min = 5, max = 50, message = "用户名长度必须在5-50个字符之间")
     private String username;
 
     /** 用户昵称，用于前端展示 */
+    @Size(max = 64, message = "昵称长度不能超过64个字符")
     private String nickname;
 
     /** 邮箱地址 */
+    @Email(message = "邮箱格式不正确")
+    @Size(max = 128, message = "邮箱长度不能超过128个字符")
     private String email;
 
     /** 手机号码 */
+    @Pattern(regexp = "^$|^1[3-9]\\d{9}$", message = "手机号格式不正确")
+    @Size(max = 20, message = "手机号长度不能超过20个字符")
     private String phone;
 
     /** 头像图片 URL */
+    @Size(max = 512, message = "头像URL长度不能超过512个字符")
     private String avatar;
 
     /** 状态：ENABLED-启用，DISABLED-禁用 */

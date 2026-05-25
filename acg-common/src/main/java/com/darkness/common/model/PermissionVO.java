@@ -3,6 +3,9 @@ package com.darkness.common.model;
 import com.darkness.common.entity.PermissionDO;
 import com.darkness.common.enums.CommonStatus;
 import com.darkness.common.enums.PermissionType;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -20,18 +23,25 @@ public class PermissionVO {
     private Long parentId;
 
     /** 权限名称，如 "用户管理"、"新增用户" */
+    @NotBlank(message = "权限名称不能为空")
+    @Size(max = 64, message = "权限名称长度不能超过64个字符")
     private String name;
 
     /** 权限编码，唯一标识，如 "user:list"、"user:create" */
+    @NotBlank(message = "权限编码不能为空")
+    @Size(max = 128, message = "权限编码长度不能超过128个字符")
     private String code;
 
     /** 权限类型：MENU-菜单，BUTTON-按钮 */
+    @NotNull(message = "权限类型不能为空")
     private PermissionType type;
 
     /** 前端路由路径，菜单类型时使用 */
+    @Size(max = 256, message = "路由路径长度不能超过256个字符")
     private String path;
 
     /** 菜单图标标识 */
+    @Size(max = 64, message = "图标标识长度不能超过64个字符")
     private String icon;
 
     /** 排序值，数值越小越靠前 */

@@ -4,6 +4,7 @@ import com.darkness.common.result.Result;
 import com.darkness.common.model.PermissionVO;
 import com.darkness.common.model.RoleVO;
 import com.darkness.user.service.RoleService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -51,7 +52,7 @@ public class RoleController {
      * @return 创建后的角色视图对象
      */
     @PostMapping
-    public Result<RoleVO> createRole(@RequestBody RoleVO vo) {
+    public Result<RoleVO> createRole(@Valid @RequestBody RoleVO vo) {
         return Result.success(roleService.createRole(vo));
     }
 
@@ -64,7 +65,7 @@ public class RoleController {
      * @return 更新后的角色视图对象
      */
     @PutMapping("/{id}")
-    public Result<RoleVO> updateRole(@PathVariable Long id, @RequestBody RoleVO vo) {
+    public Result<RoleVO> updateRole(@PathVariable Long id, @Valid @RequestBody RoleVO vo) {
         return Result.success(roleService.updateRole(id, vo));
     }
 

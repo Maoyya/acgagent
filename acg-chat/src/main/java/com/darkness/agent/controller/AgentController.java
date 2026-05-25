@@ -3,6 +3,7 @@ package com.darkness.agent.controller;
 import com.darkness.common.model.AgentVO;
 import com.darkness.agent.service.AgentService;
 import com.darkness.common.result.Result;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -49,7 +50,7 @@ public class AgentController {
      * @return 创建后的 Agent 视图对象（apiKey 已脱敏）
      */
     @PostMapping
-    public Result<AgentVO> createAgent(@RequestBody AgentVO vo) {
+    public Result<AgentVO> createAgent(@Valid @RequestBody AgentVO vo) {
         return Result.success(agentService.createAgent(vo));
     }
 
@@ -62,7 +63,7 @@ public class AgentController {
      * @return 更新后的 Agent 视图对象
      */
     @PutMapping("/{id}")
-    public Result<AgentVO> updateAgent(@PathVariable Long id, @RequestBody AgentVO vo) {
+    public Result<AgentVO> updateAgent(@PathVariable Long id, @Valid @RequestBody AgentVO vo) {
         return Result.success(agentService.updateAgent(id, vo));
     }
 
