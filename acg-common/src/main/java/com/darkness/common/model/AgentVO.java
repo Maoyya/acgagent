@@ -2,6 +2,7 @@ package com.darkness.common.model;
 
 import com.darkness.common.constant.AgentConstants;
 import com.darkness.common.entity.AgentDO;
+import com.darkness.common.enums.AgentCategory;
 import com.darkness.common.enums.CommonStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -51,6 +52,9 @@ public class AgentVO {
     /** 额外配置参数，JSON 格式 */
     private String configJson;
 
+    /** Agent 分类：CHAT-对话，VIDEO-视频，IMAGE-图像 */
+    private AgentCategory category;
+
     /** 创建时间 */
     private LocalDateTime createdAt;
 
@@ -77,6 +81,7 @@ public class AgentVO {
         vo.setModel(entity.getModel());
         vo.setStatus(entity.getStatus());
         vo.setConfigJson(entity.getConfigJson());
+        vo.setCategory(entity.getCategory());
         vo.setCreatedAt(entity.getCreatedAt());
         vo.setUpdatedAt(entity.getUpdatedAt());
         return vo;
@@ -100,6 +105,7 @@ public class AgentVO {
         entity.setModel(this.model);
         entity.setStatus(this.status);
         entity.setConfigJson(this.configJson);
+        entity.setCategory(this.category);
         return entity;
     }
 }

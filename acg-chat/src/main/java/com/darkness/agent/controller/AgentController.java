@@ -1,5 +1,6 @@
 package com.darkness.agent.controller;
 
+import com.darkness.common.annotation.RequireRole;
 import com.darkness.common.model.AgentVO;
 import com.darkness.agent.service.AgentService;
 import com.darkness.common.result.Result;
@@ -44,36 +45,39 @@ public class AgentController {
 
     /**
      * 创建新 Agent，需要提供 name、apiUrl、apiKey 等配置信息。
-     * POST /api/agents（需认证）
+     * POST /api/agents（需认证，仅管理员）
      *
      * @param vo Agent 配置信息
      * @return 创建后的 Agent 视图对象（apiKey 已脱敏）
      */
     @PostMapping
+    @RequireRole("admin")
     public Result<AgentVO> createAgent(@Valid @RequestBody AgentVO vo) {
         return Result.success(agentService.createAgent(vo));
     }
 
     /**
      * 更新 Agent 配置，不存在时抛出 404。apiKey 传入 "******" 时保留原值不变。
-     * PUT /api/agents/{id}（需认证）
+     * PUT /api/agents/{id}（需认证，仅管理员）
      *
      * @param id Agent 主键
      * @param vo 需要更新的字段
      * @return 更新后的 Agent 视图对象
      */
     @PutMapping("/{id}")
+    @RequireRole("admin")
     public Result<AgentVO> updateAgent(@PathVariable Long id, @Valid @RequestBody AgentVO vo) {
         return Result.success(agentService.updateAgent(id, vo));
     }
 
     /**
      * 逻辑删除 Agent。
-     * DELETE /api/agents/{id}（需认证）
+     * DELETE /api/agents/{id}（需认证，仅管理员）
      *
      * @param id Agent 主键
      */
     @DeleteMapping("/{id}")
+    @RequireRole("admin")
     public Result<Void> deleteAgent(@PathVariable Long id) {
         agentService.deleteAgent(id);
         return Result.success();

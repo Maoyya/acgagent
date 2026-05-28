@@ -10,6 +10,9 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 /**
  * JWT 令牌工具类，负责 Access Token 和 Refresh Token 的签发、解析与校验。
@@ -55,9 +58,26 @@ public class JwtUtil {
      * @return 签名后的 JWT 字符串
      */
     public String generateAccessToken(Long userId) {
+        return generateAccessToken(userId, null);
+    }
+
+    /**
+     * 生成 accessToken，支持携带用户角色列表。
+     * payload 中 subject 为 userId，type 声明为 ACCESS，roles 声明为角色编码列表。
+     *
+     * @param userId 用户 ID
+     * @param roles  用户角色编码列表，可为 null
+     * @return 签名后的 JWT 字符串
+     */
+    public String generateAccessToken(Long userId, List<String> roles) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("type", TokenType.ACCESS.getValue());
+        if (roles != null) {
+            claims.put("roles", roles);
+        }
         return Jwts.builder()
+                .claims(claims)
                 .subject(String.valueOf(userId))
-                .claim("type", TokenType.ACCESS.getValue())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + accessTokenExpiration))
                 .signWith(getSigningKey())
@@ -134,5 +154,22 @@ public class JwtUtil {
      */
     public boolean isRefreshToken(String token) {
         return TokenType.REFRESH.getValue().equals(parseToken(token).get("type", String.class));
+    }
+
+    /**
+     * 从 accessToken 中提取用户角色编码列表。
+     * 解析 token 的 roles 声明，不存在时返回空列表。
+     *
+     * @param token JWT 字符串
+     * @return 角色编码列表，无角色时返回空列表
+     */
+    @SuppressWarnings("unchecked")
+    public List<String> getRoles(String token) {
+        Claims claims = parseToken(token);
+        Object roles = claims.get("roles");
+        if (roles instanceof List) {
+            return (List<String>) roles;
+        }
+        return List.of();
     }
 }

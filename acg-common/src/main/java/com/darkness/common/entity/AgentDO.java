@@ -1,6 +1,7 @@
 package com.darkness.common.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.darkness.common.enums.AgentCategory;
 import com.darkness.common.enums.CommonStatus;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -36,4 +37,7 @@ public class AgentDO extends BaseEntity {
 
     /** 额外配置参数，JSON 格式，如 temperature、max_tokens 等 */
     private String configJson;
+
+    /** Agent 分类：CHAT-对话，VIDEO-视频，IMAGE-图像 */
+    private AgentCategory category;
 }

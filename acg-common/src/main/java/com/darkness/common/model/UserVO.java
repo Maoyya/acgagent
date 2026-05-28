@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 用户视图对象，用于 Controller 层与前端之间的数据传输。
@@ -49,6 +50,12 @@ public class UserVO {
 
     /** 更新时间 */
     private LocalDateTime updatedAt;
+
+    /** 用户角色编码列表，如 ["admin"] */
+    private List<String> roles;
+
+    /** 用户权限编码列表，如 ["system:user", "business:agent"] */
+    private List<String> permissions;
 
     /**
      * 将实体对象转换为视图对象。排除 password 字段，避免敏感信息泄露。

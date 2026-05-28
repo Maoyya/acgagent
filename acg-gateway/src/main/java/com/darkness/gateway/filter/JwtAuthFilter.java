@@ -15,7 +15,9 @@ import reactor.core.publisher.Mono;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Gateway JWT 鉴权全局过滤器。
@@ -73,9 +75,19 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             Claims claims = parseToken(token);
             String userId = claims.getSubject();
 
-            // 将用户 ID 写入下游请求 header
+            // 从 JWT 中提取用户角色
+            Object rolesClaim = claims.get("roles");
+            String rolesStr = "";
+            if (rolesClaim instanceof List<?> rolesList && !rolesList.isEmpty()) {
+                rolesStr = rolesList.stream()
+                        .map(Object::toString)
+                        .collect(Collectors.joining(","));
+            }
+
+            // 将用户 ID 和角色写入下游请求 header
             ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()
                     .header("X-User-Id", userId)
+                    .header("X-User-Roles", rolesStr)
                     .build();
 
             return chain.filter(exchange.mutate().request(mutatedRequest).build());

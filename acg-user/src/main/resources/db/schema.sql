@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS agent (
     model VARCHAR(128) COMMENT '模型标识，如 gpt-4、claude-3-sonnet 等',
     status TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1-启用，0-禁用',
     config_json TEXT COMMENT '额外配置参数，JSON 格式，如 temperature、max_tokens 等',
+    category VARCHAR(32) NOT NULL DEFAULT 'CHAT' COMMENT 'Agent分类：CHAT-对话,VIDEO-视频,IMAGE-生图',
     deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除：0-未删除，1-已删除',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'

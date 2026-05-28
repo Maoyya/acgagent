@@ -1,5 +1,6 @@
 package com.darkness.user.controller;
 
+import com.darkness.common.annotation.RequireRole;
 import com.darkness.common.result.Result;
 import com.darkness.common.model.PermissionVO;
 import com.darkness.common.model.RoleVO;
@@ -12,10 +13,11 @@ import java.util.List;
 
 /**
  * 角色管理 REST 控制器，提供角色 CRUD 及权限分配接口。
- * 认证要求：当前版本暂未接入认证，后续 JWT 集成后需携带有效 Token。
+ * 认证要求：需认证，仅管理员可访问。
  */
 @RestController
 @RequestMapping("/api/roles")
+@RequireRole("admin")
 @RequiredArgsConstructor
 public class RoleController {
 

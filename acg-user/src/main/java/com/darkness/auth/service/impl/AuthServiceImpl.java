@@ -11,8 +11,14 @@ import com.darkness.common.model.UserVO;
 import com.darkness.common.result.ResultCode;
 import com.darkness.common.util.JwtUtil;
 import com.darkness.common.entity.UserDO;
+import com.darkness.common.entity.RoleDO;
+import com.darkness.common.entity.UserRoleDO;
+import com.darkness.common.mapper.RoleMapper;
+import com.darkness.common.mapper.UserRoleMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 /**
  * 认证服务实现，处理用户注册、密码登录和 Token 对生成。
@@ -28,6 +34,8 @@ public class AuthServiceImpl implements AuthService {
     private final UserMapper userMapper;
     private final PasswordUtil passwordUtil;
     private final JwtUtil jwtUtil;
+    private final RoleMapper roleMapper;
+    private final UserRoleMapper userRoleMapper;
 
     /**
      * 用户注册。
@@ -53,6 +61,17 @@ public class AuthServiceImpl implements AuthService {
         user.setNickname(username);
         user.setStatus(CommonStatus.ENABLED);
         userMapper.insert(user);
+
+        // 查询默认角色（code = "user"）并绑定
+        RoleDO defaultRole = roleMapper.selectOne(
+                new LambdaQueryWrapper<RoleDO>().eq(RoleDO::getCode, "user"));
+        if (defaultRole != null) {
+            UserRoleDO userRole = new UserRoleDO();
+            userRole.setUserId(user.getId());
+            userRole.setRoleId(defaultRole.getId());
+            userRoleMapper.insert(userRole);
+        }
+
         return UserVO.from(user);
     }
 
@@ -95,14 +114,24 @@ public class AuthServiceImpl implements AuthService {
 
     /**
      * 为指定用户生成 Token 对（accessToken + refreshToken）。
-     * accessToken 默认 2 小时有效，refreshToken 默认 7 天有效，expiresIn 固定返回 7200 秒。
+     * 查询用户角色列表写入 accessToken claims，accessToken 默认 2 小时有效，refreshToken 默认 7 天有效。
      *
      * @param userId 用户 ID
      * @return Token 对
      */
     @Override
     public TokenVO generateTokenPair(Long userId) {
-        String accessToken = jwtUtil.generateAccessToken(userId);
+        // 查询用户角色
+        List<UserRoleDO> userRoles = userRoleMapper.selectList(
+                new LambdaQueryWrapper<UserRoleDO>().eq(UserRoleDO::getUserId, userId));
+        List<String> roleCodes = List.of();
+        if (!userRoles.isEmpty()) {
+            List<Long> roleIds = userRoles.stream().map(UserRoleDO::getRoleId).toList();
+            roleCodes = roleMapper.selectBatchIds(roleIds).stream()
+                    .map(RoleDO::getCode)
+                    .toList();
+        }
+        String accessToken = jwtUtil.generateAccessToken(userId, roleCodes);
         String refreshToken = jwtUtil.generateRefreshToken(userId);
         // TODO: expiresIn 应与 jwt.access-token-expiration 配置保持一致
         return new TokenVO(accessToken, refreshToken, 7200L);
