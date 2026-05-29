@@ -52,6 +52,7 @@ services:
     environment:
       NACOS_ADDR: nacos:8848
       MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
       JWT_SECRET: ${JWT_SECRET:-acgagent-jwt-secret-key-must-be-at-least-256-bits-long-for-hs256}
     depends_on:
@@ -67,6 +68,7 @@ services:
     environment:
       NACOS_ADDR: nacos:8848
       MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
     depends_on:
       - nacos
