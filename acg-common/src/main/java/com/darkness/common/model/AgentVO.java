@@ -8,10 +8,14 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Agent 视图对象，用于 Controller 层与前端之间的数据传输，对敏感字段做脱敏处理。
+ * <p>
+ * 既承载 Java 侧展示字段，也承载同步到 Python 引擎所需的丰富配置。apiKey 返回前端时固定脱敏为 "******"。
  */
 @Data
 public class AgentVO {
@@ -42,18 +46,51 @@ public class AgentVO {
     @Size(max = 512, message = "API密钥长度不能超过512个字符")
     private String apiKey;
 
-    /** 模型标识，如 gpt-4、claude-3-sonnet 等 */
+    /** 模型标识 */
     @Size(max = 128, message = "模型标识长度不能超过128个字符")
     private String model;
 
     /** 状态：ENABLED-启用，DISABLED-禁用 */
     private CommonStatus status;
 
-    /** 额外配置参数，JSON 格式 */
+    /** 额外配置参数（已废弃，保留向前兼容） */
     private String configJson;
 
     /** Agent 分类：CHAT-对话，VIDEO-视频，IMAGE-图像 */
     private AgentCategory category;
+
+    /** 系统提示词，同步到 Python system_prompt */
+    private String systemPrompt;
+
+    /** LLM 厂商：doubao/qwen/deepseek */
+    private String provider;
+
+    /** 生成温度 */
+    private BigDecimal temperature;
+
+    /** 最大输出 token 数 */
+    private Integer maxTokens;
+
+    /** Top-P 采样 */
+    private BigDecimal topP;
+
+    /** 记忆类型：conversation_window/summary/none */
+    private String memoryType;
+
+    /** 上下文窗口 token 数 */
+    private Integer memoryMaxTokens;
+
+    /** 能力标签数组 */
+    private List<String> capabilities;
+
+    /** 关联知识库 id 列表（Python 侧 string id） */
+    private List<String> knowledgeBaseIds;
+
+    /** 关联工具 id 列表（Python 侧 string id） */
+    private List<String> toolIds;
+
+    /** 同步锚点：Python 侧 agent 的 string id，未同步时为 null */
+    private String pythonAgentId;
 
     /** 创建时间 */
     private LocalDateTime createdAt;
@@ -63,8 +100,6 @@ public class AgentVO {
 
     /**
      * 将实体转换为 VO，同时对 apiKey 进行脱敏处理。
-     * 将 AgentDO 的所有字段复制到 AgentVO，其中 apiKey 替换为固定掩码 "******"，
-     * 避免真实密钥泄露到前端。
      *
      * @param entity Agent 实体
      * @return 脱敏后的 AgentVO，若 entity 为 null 则返回 null
@@ -82,6 +117,17 @@ public class AgentVO {
         vo.setStatus(entity.getStatus());
         vo.setConfigJson(entity.getConfigJson());
         vo.setCategory(entity.getCategory());
+        vo.setSystemPrompt(entity.getSystemPrompt());
+        vo.setProvider(entity.getProvider());
+        vo.setTemperature(entity.getTemperature());
+        vo.setMaxTokens(entity.getMaxTokens());
+        vo.setTopP(entity.getTopP());
+        vo.setMemoryType(entity.getMemoryType());
+        vo.setMemoryMaxTokens(entity.getMemoryMaxTokens());
+        vo.setCapabilities(entity.getCapabilities());
+        vo.setKnowledgeBaseIds(entity.getKnowledgeBaseIds());
+        vo.setToolIds(entity.getToolIds());
+        vo.setPythonAgentId(entity.getPythonAgentId());
         vo.setCreatedAt(entity.getCreatedAt());
         vo.setUpdatedAt(entity.getUpdatedAt());
         return vo;
@@ -89,8 +135,7 @@ public class AgentVO {
 
     /**
      * 将 VO 转换为实体，供新增或更新操作使用。
-     * 注意：此方法不做脱敏逆处理，apiKey 字段直接传入（更新时由 Service 层
-     * 判断是否为脱敏值 "******"，若是则保留数据库原值）。
+     * 注意：此方法不做脱敏逆处理，apiKey 字段直接传入（更新时由 Service 层判断是否为掩码值）。
      *
      * @return AgentDO 实体
      */
@@ -106,6 +151,17 @@ public class AgentVO {
         entity.setStatus(this.status);
         entity.setConfigJson(this.configJson);
         entity.setCategory(this.category);
+        entity.setSystemPrompt(this.systemPrompt);
+        entity.setProvider(this.provider);
+        entity.setTemperature(this.temperature);
+        entity.setMaxTokens(this.maxTokens);
+        entity.setTopP(this.topP);
+        entity.setMemoryType(this.memoryType);
+        entity.setMemoryMaxTokens(this.memoryMaxTokens);
+        entity.setCapabilities(this.capabilities);
+        entity.setKnowledgeBaseIds(this.knowledgeBaseIds);
+        entity.setToolIds(this.toolIds);
+        entity.setPythonAgentId(this.pythonAgentId);
         return entity;
     }
 }

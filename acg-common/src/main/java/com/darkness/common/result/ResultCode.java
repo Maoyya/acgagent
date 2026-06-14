@@ -16,7 +16,8 @@ public enum ResultCode {
     UNAUTHORIZED(401, "Unauthorized"),
     FORBIDDEN(403, "Forbidden"),
     NOT_FOUND(404, "Not found"),
-    INTERNAL_ERROR(500, "Internal server error");
+    INTERNAL_ERROR(500, "Internal server error"),
+    SERVICE_UNAVAILABLE(503, "Service unavailable");
 
     private final int code;
     private final String message;

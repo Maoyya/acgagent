@@ -1,5 +1,6 @@
 package com.darkness.agent.service.impl;
 
+import com.darkness.agent.client.PythonAiClient;
 import com.darkness.common.constant.AgentConstants;
 import com.darkness.common.entity.AgentDO;
 import com.darkness.common.exception.BizException;
@@ -17,17 +18,22 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * Agent 服务单元测试，覆盖 Agent CRUD 和 API Key 脱敏保护逻辑。
- * 核心验证点：不存在的记录抛 NOT_FOUND，更新时掩码/null 不覆盖真实 API Key。
+ * Agent 服务单元测试，覆盖 Agent CRUD、API Key 脱敏保护，以及与 Python AI 引擎的同步。
+ * 核心验证点：不存在记录抛 NOT_FOUND；更新时掩码/null 不覆盖真实 API Key；
+ * Agent CUD 时同步 Python，Python 失败则抛异常（@Transactional 由框架回滚，单测验证控制流）。
  */
 @ExtendWith(MockitoExtension.class)
 class AgentServiceImplTest {
 
     @Mock
     private AgentMapper agentMapper;
+
+    @Mock
+    private PythonAiClient pythonAiClient;
 
     @InjectMocks
     private AgentServiceImpl agentService;
@@ -79,7 +85,7 @@ class AgentServiceImplTest {
     // ==================== createAgent ====================
 
     @Test
-    void createAgent_success() {
+    void createAgent_success_pythonSynced() {
         AgentVO vo = new AgentVO();
         vo.setName("NewAgent");
         vo.setApiKey("secret-key");
@@ -88,30 +94,55 @@ class AgentServiceImplTest {
             entity.setId(1L);
             return 1;
         });
+        when(pythonAiClient.createAgent(any(AgentDO.class))).thenReturn("py-xyz");
+        when(agentMapper.updateById(any(AgentDO.class))).thenReturn(1);
 
         AgentVO result = agentService.createAgent(vo);
 
         assertThat(result).isNotNull();
         assertThat(result.getId()).isEqualTo(1L);
+        assertThat(result.getPythonAgentId()).isEqualTo("py-xyz");
+    }
+
+    @Test
+    void createAgent_pythonFails_throwsAndDoesNotWritePythonId() {
+        AgentVO vo = new AgentVO();
+        vo.setName("X");
+        vo.setApiKey("k");
+        when(agentMapper.insert(any(AgentDO.class))).thenAnswer(i -> {
+            i.getArgument(0, AgentDO.class).setId(2L);
+            return 1;
+        });
+        when(pythonAiClient.createAgent(any(AgentDO.class)))
+                .thenThrow(new BizException(503, "down"));
+
+        assertThatThrownBy(() -> agentService.createAgent(vo))
+                .isInstanceOf(BizException.class)
+                .extracting("code").isEqualTo(503);
+        // 控制流证明：Python 失败后不应进入"回写 pythonId"步骤
+        // 使用 any(AgentDO.class) 消除 BaseMapper.updateById(T) / updateById(Collection) 重载歧义
+        verify(agentMapper, never()).updateById(any(AgentDO.class));
     }
 
     // ==================== updateAgent ====================
 
     @Test
-    void updateAgent_success() {
+    void updateAgent_success_pythonSynced() {
         AgentDO existing = new AgentDO();
         existing.setId(1L);
         existing.setApiKey("real-secret-key");
-        when(agentMapper.selectById(1L)).thenReturn(existing);
+        existing.setPythonAgentId("py-1");
+        // updateAgent 内部两次 selectById：取 existing、取回写后对象
+        when(agentMapper.selectById(1L)).thenReturn(existing, existing);
         when(agentMapper.updateById(any(AgentDO.class))).thenReturn(1);
 
         AgentVO vo = new AgentVO();
         vo.setName("Updated");
         vo.setApiKey("new-real-key");
 
-        AgentVO result = agentService.updateAgent(1L, vo);
+        agentService.updateAgent(1L, vo);
 
-        assertThat(result).isNotNull();
+        verify(pythonAiClient).updateAgent(eq("py-1"), any(AgentDO.class));
     }
 
     @Test
@@ -125,11 +156,30 @@ class AgentServiceImplTest {
     }
 
     @Test
+    void updateAgent_notSynced_throws() {
+        AgentDO existing = new AgentDO();
+        existing.setId(1L);
+        existing.setApiKey("real");
+        existing.setPythonAgentId(null); // 未同步
+        when(agentMapper.selectById(1L)).thenReturn(existing);
+
+        AgentVO vo = new AgentVO();
+        vo.setName("U");
+        assertThatThrownBy(() -> agentService.updateAgent(1L, vo))
+                .isInstanceOf(BizException.class)
+                .extracting("code").isEqualTo(ResultCode.INTERNAL_ERROR.getCode());
+        // 使用 any(AgentDO.class) 消除 BaseMapper.updateById(T) / updateById(Collection) 重载歧义
+        verify(agentMapper, never()).updateById(any(AgentDO.class));
+        verifyNoInteractions(pythonAiClient);
+    }
+
+    @Test
     void updateAgent_preserveApiKey_whenMaskSent() {
         AgentDO existing = new AgentDO();
         existing.setId(1L);
         existing.setApiKey("real-secret-key");
-        when(agentMapper.selectById(1L)).thenReturn(existing);
+        existing.setPythonAgentId("py-1");
+        when(agentMapper.selectById(1L)).thenReturn(existing, existing);
         when(agentMapper.updateById(any(AgentDO.class))).thenReturn(1);
 
         AgentVO vo = new AgentVO();
@@ -138,7 +188,6 @@ class AgentServiceImplTest {
 
         agentService.updateAgent(1L, vo);
 
-        // 验证 updateById 传入的实体保留了真实的 apiKey
         var captor = org.mockito.ArgumentCaptor.forClass(AgentDO.class);
         verify(agentMapper).updateById(captor.capture());
         assertThat(captor.getValue().getApiKey()).isEqualTo("real-secret-key");
@@ -149,7 +198,8 @@ class AgentServiceImplTest {
         AgentDO existing = new AgentDO();
         existing.setId(1L);
         existing.setApiKey("real-secret-key");
-        when(agentMapper.selectById(1L)).thenReturn(existing);
+        existing.setPythonAgentId("py-1");
+        when(agentMapper.selectById(1L)).thenReturn(existing, existing);
         when(agentMapper.updateById(any(AgentDO.class))).thenReturn(1);
 
         AgentVO vo = new AgentVO();
@@ -163,18 +213,39 @@ class AgentServiceImplTest {
         assertThat(captor.getValue().getApiKey()).isEqualTo("real-secret-key");
     }
 
+    @Test
+    void updateAgent_pythonFails_throws() {
+        AgentDO existing = new AgentDO();
+        existing.setId(1L);
+        existing.setApiKey("real");
+        existing.setPythonAgentId("py-1");
+        when(agentMapper.selectById(1L)).thenReturn(existing);
+        when(agentMapper.updateById(any(AgentDO.class))).thenReturn(1);
+        doThrow(new BizException(503, "down"))
+                .when(pythonAiClient).updateAgent(eq("py-1"), any(AgentDO.class));
+
+        AgentVO vo = new AgentVO();
+        vo.setName("U");
+        vo.setApiKey("******");
+        assertThatThrownBy(() -> agentService.updateAgent(1L, vo))
+                .isInstanceOf(BizException.class)
+                .extracting("code").isEqualTo(503);
+    }
+
     // ==================== deleteAgent ====================
 
     @Test
     void deleteAgent_success() {
         AgentDO existing = new AgentDO();
         existing.setId(1L);
+        existing.setPythonAgentId("py-1");
         when(agentMapper.selectById(1L)).thenReturn(existing);
         when(agentMapper.deleteById(1L)).thenReturn(1);
 
         agentService.deleteAgent(1L);
 
         verify(agentMapper).deleteById(1L);
+        verify(pythonAiClient).deleteAgent("py-1");
     }
 
     @Test
@@ -184,5 +255,20 @@ class AgentServiceImplTest {
         assertThatThrownBy(() -> agentService.deleteAgent(999L))
                 .isInstanceOf(BizException.class)
                 .extracting("code").isEqualTo(ResultCode.NOT_FOUND.getCode());
+    }
+
+    @Test
+    void deleteAgent_pythonFails_throws() {
+        AgentDO existing = new AgentDO();
+        existing.setId(1L);
+        existing.setPythonAgentId("py-1");
+        when(agentMapper.selectById(1L)).thenReturn(existing);
+        when(agentMapper.deleteById(1L)).thenReturn(1);
+        doThrow(new BizException(503, "down"))
+                .when(pythonAiClient).deleteAgent("py-1");
+
+        assertThatThrownBy(() -> agentService.deleteAgent(1L))
+                .isInstanceOf(BizException.class)
+                .extracting("code").isEqualTo(503);
     }
 }

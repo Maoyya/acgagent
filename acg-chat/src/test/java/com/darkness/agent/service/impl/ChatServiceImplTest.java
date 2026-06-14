@@ -24,9 +24,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * 对话服务单元测试，覆盖会话 CRUD 和 IDOR 所有权校验逻辑。
- * 核心验证点：不存在的会话抛 NOT_FOUND，非所有者访问抛 FORBIDDEN。
- * sendMessage 的 SSE 异步流不做单元测试（涉及线程池和 WebClient，适合集成测试）。
+ * 对话服务单元测试，覆盖会话 CRUD、IDOR 所有权校验，以及 sendMessage 的前置校验。
+ * 核心验证点：不存在的会话抛 NOT_FOUND，非所有者访问抛 FORBIDDEN；
+ * sendMessage 的 SSE 异步流不做单元测试（涉及线程池和 WebClient，适合集成测试），
+ * 但"Agent 未同步到 Python"的前置校验在异步块之前，可单测。
  */
 @ExtendWith(MockitoExtension.class)
 class ChatServiceImplTest {
@@ -41,7 +42,10 @@ class ChatServiceImplTest {
     private AgentMapper agentMapper;
 
     @Mock
-    private com.darkness.agent.client.AgentClient agentClient;
+    private com.darkness.agent.client.PythonAiClient pythonAiClient;
+
+    @Mock
+    private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     @InjectMocks
     private ChatServiceImpl chatService;
@@ -154,5 +158,27 @@ class ChatServiceImplTest {
         assertThatThrownBy(() -> chatService.deleteConversation(1L, 999L))
                 .isInstanceOf(BizException.class)
                 .extracting("code").isEqualTo(ResultCode.FORBIDDEN.getCode());
+    }
+
+    // ==================== sendMessage ====================
+
+    @Test
+    void sendMessage_agentNotSynced_throws() {
+        ConversationDO conv = new ConversationDO();
+        conv.setId(1L);
+        conv.setUserId(1L);
+        conv.setAgentId(10L);
+        when(conversationMapper.selectById(1L)).thenReturn(conv);
+
+        AgentDO agent = new AgentDO();
+        agent.setId(10L);
+        agent.setPythonAgentId(null); // 未同步
+        when(agentMapper.selectById(10L)).thenReturn(agent);
+
+        assertThatThrownBy(() -> chatService.sendMessage(1L, 1L, "hi"))
+                .isInstanceOf(BizException.class)
+                .extracting("code").isEqualTo(ResultCode.INTERNAL_ERROR.getCode());
+        // 未同步时不应持久化用户消息
+        verify(messageMapper, never()).insert(any(MessageDO.class));
     }
 }

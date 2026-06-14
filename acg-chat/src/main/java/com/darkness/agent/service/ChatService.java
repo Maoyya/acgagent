@@ -53,7 +53,7 @@ public interface ChatService {
     /**
      * 通过 SSE 流式发送消息给 Agent，并将用户消息和助手回复持久化。
      * 校验会话归属后，先将用户消息持久化到 message 表，再查询该会话完整消息历史作为
-     * LLM 上下文，通过 AgentClient 以 SSE 流式调用外部 LLM API，流完成后将助手回复
+     * LLM 上下文，通过 PythonAiClient 调用 Python AI 引擎以 SSE 流式获取回复，流完成后将助手回复
      * 持久化到 message 表并统计 token 消耗。
      *
      * @param userId         当前用户 ID

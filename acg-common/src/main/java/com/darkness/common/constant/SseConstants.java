@@ -1,7 +1,7 @@
 package com.darkness.common.constant;
 
 /**
- * SSE 流式响应相关常量，用于 AgentClient 解析 LLM API 的 SSE 协议。
+ * SSE 流式响应相关常量，用于解析 LLM API / Python AI 引擎的 SSE 协议。
  */
 public final class SseConstants {
     private SseConstants() {}
