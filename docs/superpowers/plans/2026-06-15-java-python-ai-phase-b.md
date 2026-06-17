@@ -1190,7 +1190,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 /**
- * 工具代理 Service 测试：验证转发 + 错误透传（含内置工具不可删的 400 错误透传）。
+ * 工具代理 Service 测试：验证转发 + 错误透传（含内置工具不可删的 404 错误透传）。
  */
 @ExtendWith(MockitoExtension.class)
 class ToolServiceImplTest {
@@ -1228,11 +1228,11 @@ class ToolServiceImplTest {
     @Test
     void delete_builtinTool_propagatesError() {
         // 内置工具不可删，Python 返回 code!=200，PythonAiClient 抛 BizException
-        doThrow(new BizException(400, "builtin tool cannot be deleted"))
+        doThrow(new BizException(404, "builtin tool cannot be deleted"))
                 .when(pythonAiClient).deleteTool("calculator");
         assertThatThrownBy(() -> toolService.delete("calculator"))
                 .isInstanceOf(BizException.class)
-                .extracting("code").isEqualTo(400);
+                .extracting("code").isEqualTo(404);
     }
 }
 ```
@@ -1432,7 +1432,7 @@ acg-common 新增 KB/Doc/Tool VO（camelCase + @JsonAlias）。
 
 ## 注意
 - 文档上传为 multipart 转发，Python 异步处理，返回 status=processing，前端需轮询状态。
-- 内置工具（calculator/web_search/knowledge_search）不可删，Python 返回 400 透传。
+- 内置工具（calculator/web_search/knowledge_search）不可删，Python 返回 404 透传。
 ```
 
 - [ ] **Step 2：Nacos `acg-gateway.yaml` 路由追加（手动）**
@@ -1463,7 +1463,7 @@ Expected: BUILD SUCCESS，acg-common（80+3）+ acg-chat（33+3+6+5+4）全绿�
    - `POST /api/knowledge-bases`（body: `{name}`）→ 返回知识库 VO。
    - `POST /api/knowledge-bases/{id}/documents`（multipart file=a.txt）→ 返回 status=processing 的 DocumentVO；稍后 `GET /api/knowledge-bases/{id}/documents/{docId}` 看 status 转 completed。
    - `GET /api/tools` → 含 3 个内置工具。
-   - `DELETE /api/tools/calculator` → 返回 400（内置不可删，透传 Python 错误）。
+   - `DELETE /api/tools/calculator` → 返回 404（内置不可删，透传 Python 错误）。
 4. 用非 admin 用户调上述任一接口 → 403（`@RequireRole("admin")` 生效）。
 
 - [ ] **Step 5：CR + git add 剩余**
@@ -1479,7 +1479,7 @@ git status  # 确认无遗漏
 
 - [ ] `/api/knowledge-bases/**`、`/api/tools/**` 经 Java 代理 Python，admin 鉴权生效
 - [ ] 文档 multipart 上传正确转发，返回 status=processing
-- [ ] 内置工具删除返回 400 透传
+- [ ] 内置工具删除返回 404 透传
 - [ ] Python 返回错误时按其 code 透传 BizException
 - [ ] `mvn test -pl acg-common,acg-chat -am` 全绿，无跳过
 - [ ] 变更日志已提交

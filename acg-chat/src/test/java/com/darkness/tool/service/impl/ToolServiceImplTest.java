@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 /**
- * 工具代理 Service 测试：验证转发 + 错误透传（含内置工具不可删的 400 错误透传）。
+ * 工具代理 Service 测试：验证转发 + 错误透传（含内置工具不可删的 404 错误透传）。
  */
 @ExtendWith(MockitoExtension.class)
 class ToolServiceImplTest {
@@ -55,10 +55,10 @@ class ToolServiceImplTest {
     @Test
     void delete_builtinTool_propagatesError() {
         // 内置工具不可删，Python 返回 code!=200，PythonAiClient 抛 BizException
-        doThrow(new BizException(400, "builtin tool cannot be deleted"))
+        doThrow(new BizException(404, "builtin tool cannot be deleted"))
                 .when(pythonAiClient).deleteTool("calculator");
         assertThatThrownBy(() -> toolService.delete("calculator"))
                 .isInstanceOf(BizException.class)
-                .extracting("code").isEqualTo(400);
+                .extracting("code").isEqualTo(404);
     }
 }

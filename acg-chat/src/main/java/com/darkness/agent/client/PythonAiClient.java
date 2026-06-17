@@ -33,6 +33,7 @@ import java.util.Map;
  * <ul>
  *   <li>Agent 配置同步：createAgent / updateAgent / deleteAgent（同步、非流式）</li>
  *   <li>对话流式：streamChat 返回结构化 ChatEvent 的 Flux</li>
+ *   <li>知识库/文档/工具代理：KB/Doc/Tool 的 CRUD（含 multipart 文档上传），经 extractData/extractDataList 解析 Python Result</li>
  * </ul>
  * 所有请求带 X-API-Key；对话请求额外带 X-User-Id 透传当前用户。
  * 普通/流式请求分别应用 readTimeout / streamReadTimeout（reactor .timeout()）。

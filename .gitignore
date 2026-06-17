@@ -34,3 +34,6 @@ build/
 
 ### Mac OS ###
 .DS_Storeacgagent-service-user/acgAgent-service-user.iml
+
+### Logs ###
+*.log

@@ -19,5 +19,5 @@ spec：docs/superpowers/specs/2026-06-14-java-python-ai-integration-design.md §
 
 ## 注意
 - 文档上传为 multipart 转发，Python 异步处理，返回 `status=processing`，前端需轮询状态。
-- 内置工具（calculator/web_search/knowledge_search）不可删，Python 返回 400，Java 透传 `BizException`。
+- 内置工具（calculator/web_search/knowledge_search）不可删，Python 返回 404（`Tool not found or builtin tool cannot be deleted`），Java 透传 `BizException`。
 - 路由需重启 acg-gateway（或触发 /actuator/refresh）后对前端生效；Nacos 配置已就位。
