@@ -174,27 +174,35 @@ public class PythonAiClient {
     public Map<String, Object> buildCreateBody(AgentDO agent) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("name", agent.getName());
-        body.put("description", agent.getDescription());
-        body.put("system_prompt", agent.getSystemPrompt());
+        // description / system_prompt 在 Python 侧是 Optional（可接受 null），null 时省略更干净
+        if (agent.getDescription() != null) body.put("description", agent.getDescription());
+        if (agent.getSystemPrompt() != null) body.put("system_prompt", agent.getSystemPrompt());
 
         Map<String, Object> llm = new LinkedHashMap<>();
-        llm.put("provider", agent.getProvider());
+        // provider 是 Python 必填项（无默认），但 llm.py 并未实际使用它（OpenAI 兼容统一走 ChatOpenAI），
+        // 故 Java 无值时给默认 "openai"，避免老前端不传 provider 导致 Python 422
+        llm.put("provider", agent.getProvider() != null ? agent.getProvider() : "openai");
         llm.put("model", agent.getModel());
         llm.put("base_url", agent.getApiUrl());
         llm.put("api_key", agent.getApiKey());
-        llm.put("temperature", agent.getTemperature());
-        llm.put("max_tokens", agent.getMaxTokens());
-        llm.put("top_p", agent.getTopP());
+        // temperature/max_tokens/top_p 在 Python 侧有默认值，仅当 Java 有值时发送，否则省略让 Python 补默认
+        if (agent.getTemperature() != null) llm.put("temperature", agent.getTemperature());
+        if (agent.getMaxTokens() != null) llm.put("max_tokens", agent.getMaxTokens());
+        if (agent.getTopP() != null) llm.put("top_p", agent.getTopP());
         body.put("llm_config", llm);
 
-        Map<String, Object> mem = new LinkedHashMap<>();
-        mem.put("type", agent.getMemoryType());
-        mem.put("max_tokens", agent.getMemoryMaxTokens());
-        body.put("memory_config", mem);
+        // memory_config 有默认工厂，仅当有值时发送；否则省略让 Python 用默认（conversation_window / 8000）
+        if (agent.getMemoryType() != null || agent.getMemoryMaxTokens() != null) {
+            Map<String, Object> mem = new LinkedHashMap<>();
+            if (agent.getMemoryType() != null) mem.put("type", agent.getMemoryType());
+            if (agent.getMemoryMaxTokens() != null) mem.put("max_tokens", agent.getMemoryMaxTokens());
+            body.put("memory_config", mem);
+        }
 
-        body.put("capabilities", agent.getCapabilities());
-        body.put("knowledge_base_ids", agent.getKnowledgeBaseIds());
-        body.put("tool_ids", agent.getToolIds());
+        // capabilities / knowledge_base_ids / tool_ids 有默认值，null 时省略
+        if (agent.getCapabilities() != null) body.put("capabilities", agent.getCapabilities());
+        if (agent.getKnowledgeBaseIds() != null) body.put("knowledge_base_ids", agent.getKnowledgeBaseIds());
+        if (agent.getToolIds() != null) body.put("tool_ids", agent.getToolIds());
         return body;
     }
 

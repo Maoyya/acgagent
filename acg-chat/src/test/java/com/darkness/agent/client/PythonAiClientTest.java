@@ -96,6 +96,38 @@ class PythonAiClientTest {
     }
 
     @Test
+    void buildCreateBody_omitsNulls_andDefaultsProvider() {
+        // 模拟老前端只传基础字段：provider/temperature/max_tokens/top_p/memory/capabilities/kb/tool 全 null
+        com.darkness.common.entity.AgentDO agent = new com.darkness.common.entity.AgentDO();
+        agent.setName("A");
+        agent.setApiUrl("http://llm");
+        agent.setApiKey("secret");
+        agent.setModel("m");
+
+        Map<String, Object> body = client.buildCreateBody(agent);
+
+        // 顶层 null 字段省略，让 Python 用默认值
+        assertThat(body).containsEntry("name", "A");
+        assertThat(body).doesNotContainKey("description");
+        assertThat(body).doesNotContainKey("system_prompt");
+        assertThat(body).doesNotContainKey("memory_config");
+        assertThat(body).doesNotContainKey("capabilities");
+        assertThat(body).doesNotContainKey("knowledge_base_ids");
+        assertThat(body).doesNotContainKey("tool_ids");
+
+        // llm_config：provider 必填且 Java 无值 → 默认 "openai"；temperature 等省略
+        @SuppressWarnings("unchecked")
+        Map<String, Object> llm = (Map<String, Object>) body.get("llm_config");
+        assertThat(llm).containsEntry("provider", "openai");
+        assertThat(llm).containsEntry("model", "m");
+        assertThat(llm).containsEntry("base_url", "http://llm");
+        assertThat(llm).containsEntry("api_key", "secret");
+        assertThat(llm).doesNotContainKey("temperature");
+        assertThat(llm).doesNotContainKey("max_tokens");
+        assertThat(llm).doesNotContainKey("top_p");
+    }
+
+    @Test
     void extractData_success_returnsDataObject() {
         String json = "{\"code\":200,\"data\":{\"id\":\"kb1\",\"name\":\"KB\"}}";
         com.darkness.common.model.KnowledgeBaseVO vo =
