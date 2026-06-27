@@ -1,5 +1,8 @@
 -- =====================================================================
--- 迁移：agent 表新增 11 列（接入 Python AI 引擎）
+-- 迁移：agent 表新增 12 列（category + 接入 Python AI 引擎的 11 列）
+-- 修正(2026-06-27)：补回此前遗漏的 category 列。原脚本仅 ALTER 11 列却用 AFTER category 定位，
+--       但未给 category 写 ADD COLUMN，导致旧库（连 category 都没有）执行首条即报 "Unknown column 'category'"。
+--       现 category 列改为本脚本第一条 ADD COLUMN，其后 11 列的 AFTER 引用顺次衔接，脚本自洽。
 -- 日期：2026-06-14
 -- 对应变更日志：docs/changelogs/2026-06-14-agent-python-sync.md
 -- 说明：仅给【已存在的】acg_agent 库执行；全新建库请直接用 schema.sql（已含这些列）。
@@ -11,6 +14,7 @@
 USE acg_agent;
 
 ALTER TABLE agent
+    ADD COLUMN category           VARCHAR(32)  NOT NULL DEFAULT 'CHAT' COMMENT 'Agent分类：CHAT-对话,VIDEO-视频,IMAGE-生图' AFTER config_json,
     ADD COLUMN system_prompt      TEXT         COMMENT '系统提示词，传给 Python 作为 Agent system_prompt'             AFTER category,
     ADD COLUMN provider           VARCHAR(32)  COMMENT 'LLM 厂商：doubao/qwen/deepseek'                              AFTER system_prompt,
     ADD COLUMN temperature        DECIMAL(3,2) DEFAULT 0.70 COMMENT '生成温度'                                              AFTER provider,
