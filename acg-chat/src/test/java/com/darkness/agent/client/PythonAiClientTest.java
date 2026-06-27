@@ -3,6 +3,9 @@ package com.darkness.agent.client;
 import com.darkness.common.exception.BizException;
 import com.darkness.common.model.ChatEvent;
 import com.darkness.common.result.ResultCode;
+import com.darkness.common.enums.PromptMode;
+import com.darkness.common.model.PromptGenerateOutcome;
+import com.darkness.common.model.PromptGenerateRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -153,5 +156,42 @@ class PythonAiClientTest {
         assertThat(list).hasSize(2);
         assertThat(list.get(0).getFileName()).isEqualTo("a.pdf");
         assertThat(list.get(1).getId()).isEqualTo("d2");
+    }
+
+    @Test
+    void parseGenerateOutcome_success_returnsSuccessOutcome() {
+        String json = "{\"code\":200,\"data\":{\"system_prompt\":\"你是...\",\"mode\":\"acg\","
+                + "\"moderation\":{\"passed\":true},\"estimate\":{\"prompt_tokens\":120,\"est_completion_tokens\":0,\"model\":\"deepseek-chat\"}}}";
+        PromptGenerateOutcome o = client.parseGenerateOutcome(json);
+        assertThat(o.isBlocked()).isFalse();
+        assertThat(o.getSuccess().getSystemPrompt()).isEqualTo("你是...");
+        assertThat(o.getSuccess().getEstimate().getPromptTokens()).isEqualTo(120);
+    }
+
+    @Test
+    void parseGenerateOutcome_blocked_returnsBlockedOutcome_notThrow() {
+        String json = "{\"code\":403,\"message\":\"blocked\",\"data\":{\"passed\":false,\"violated_rules\":[\"r\"],\"mode\":\"compliant\"}}";
+        PromptGenerateOutcome o = client.parseGenerateOutcome(json);
+        assertThat(o.isBlocked()).isTrue();
+        assertThat(o.getVerdict().getPassed()).isFalse();
+    }
+
+    @Test
+    void parseGenerateOutcome_python500_throwsBizWithCode() {
+        assertThatThrownBy(() -> client.parseGenerateOutcome("{\"code\":500,\"message\":\"llm down\"}"))
+                .isInstanceOf(BizException.class)
+                .extracting("code").isEqualTo(500);
+    }
+
+    @Test
+    void buildPromptGenerateBody_snakeCase() {
+        PromptGenerateRequest req = new PromptGenerateRequest();
+        req.setUserHints(java.util.List.of("毒舌客服"));
+        req.setMode(PromptMode.COMPLIANT);
+        req.setTargetCapabilities(java.util.List.of("chat"));
+        Map<String, Object> body = client.buildPromptGenerateBody(req);
+        assertThat(body).containsEntry("user_hints", java.util.List.of("毒舌客服"));
+        assertThat(body).containsEntry("mode", "compliant");
+        assertThat(body).containsEntry("target_capabilities", java.util.List.of("chat"));
     }
 }

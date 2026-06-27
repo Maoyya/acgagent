@@ -9,6 +9,14 @@ import com.darkness.common.model.KnowledgeBaseVO;
 import com.darkness.common.model.ToolCreateRequest;
 import com.darkness.common.model.ToolVO;
 import com.darkness.common.result.ResultCode;
+import com.darkness.common.enums.PromptMode;
+import com.darkness.common.model.PromptEstimateRequest;
+import com.darkness.common.model.PromptGenerateOutcome;
+import com.darkness.common.model.PromptGenerateRequest;
+import com.darkness.common.model.PromptGenerateResponseVO;
+import com.darkness.common.model.PromptModerateRequest;
+import com.darkness.common.model.ModerationVerdictVO;
+import com.darkness.common.model.CostEstimateVO;
 import com.darkness.config.PythonAgentProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -341,6 +349,96 @@ public class PythonAiClient {
 
     public void deleteTool(String toolId) {
         verifySuccess(getJsonDelete("/api/v1/tools/" + toolId));
+    }
+
+    // ==================== Prompt ====================
+
+    /**
+     * 调 Python POST /api/v1/prompts/generate。
+     * code=200 → 成功响应；code=403 → 被 moderation 拦截(不抛，带裁决)；其余 → BizException(code)。
+     *
+     * @param req    生成请求
+     * @param userId 当前用户 id，透传 X-User-Id（Python 据此写偏好）
+     * @return 生成结果（success 或 blocked）
+     */
+    public PromptGenerateOutcome generatePrompt(PromptGenerateRequest req, Long userId) {
+        String json = pythonWebClient.post()
+                .uri("/api/v1/prompts/generate")
+                .header("X-API-Key", props.getApiKey())
+                .header("X-User-Id", String.valueOf(userId))
+                .header("Content-Type", "application/json")
+                .bodyValue(buildPromptGenerateBody(req))
+                .retrieve().bodyToMono(String.class)
+                .timeout(Duration.ofMillis(props.getReadTimeout())).block();
+        return parseGenerateOutcome(json);
+    }
+
+    /**
+     * 解析 generate 响应信封：200→success，403→blocked(不抛)，其余→BizException(code)。
+     * 纯解析方法，可单测（WebClient 流程归集成测试）。
+     */
+    public PromptGenerateOutcome parseGenerateOutcome(String json) {
+        JsonNode root = readTree(json);
+        int code = root.path("code").asInt(200);
+        JsonNode data = root.path("data");
+        try {
+            if (code == 200) {
+                return PromptGenerateOutcome.success(objectMapper.treeToValue(data, PromptGenerateResponseVO.class));
+            } else if (code == 403) {
+                return PromptGenerateOutcome.blocked(objectMapper.treeToValue(data, ModerationVerdictVO.class));
+            }
+        } catch (Exception e) {
+            throw new BizException(ResultCode.SERVICE_UNAVAILABLE, "AI 引擎响应解析失败");
+        }
+        throw new BizException(code, root.path("message").asText("Python generate prompt failed"));
+    }
+
+    /**
+     * 构造 generate 请求体（snake_case 键，匹配 Python pydantic）。
+     */
+    public Map<String, Object> buildPromptGenerateBody(PromptGenerateRequest req) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("user_hints", req.getUserHints());
+        body.put("mode", req.getMode() != null ? req.getMode().getValue() : PromptMode.ACG.getValue());
+        if (req.getTargetCapabilities() != null) {
+            body.put("target_capabilities", req.getTargetCapabilities());
+        }
+        return body;
+    }
+
+    /**
+     * 调 Python POST /api/v1/prompts/moderate，返回裁决。code != 200 由 extractData 抛 BizException。
+     */
+    public ModerationVerdictVO moderatePrompt(PromptModerateRequest req, Long userId) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("system_prompt", req.getSystemPrompt());
+        body.put("mode", req.getMode() != null ? req.getMode().getValue() : PromptMode.ACG.getValue());
+        if (req.getTargetCapabilities() != null) body.put("target_capabilities", req.getTargetCapabilities());
+        return extractData(postJson("/api/v1/prompts/moderate", body, userId), ModerationVerdictVO.class);
+    }
+
+    /**
+     * 调 Python POST /api/v1/prompts/estimate，返回消耗估算。code != 200 由 extractData 抛。
+     */
+    public CostEstimateVO estimatePrompt(PromptEstimateRequest req, Long userId) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("system_prompt", req.getSystemPrompt());
+        if (req.getUserHints() != null) body.put("user_hints", req.getUserHints());
+        return extractData(postJson("/api/v1/prompts/estimate", body, userId), CostEstimateVO.class);
+    }
+
+    /**
+     * POST JSON 通用辅助（带 X-API-Key + X-User-Id）。
+     */
+    private String postJson(String path, Map<String, Object> body, Long userId) {
+        return pythonWebClient.post()
+                .uri(path)
+                .header("X-API-Key", props.getApiKey())
+                .header("X-User-Id", String.valueOf(userId))
+                .header("Content-Type", "application/json")
+                .bodyValue(body)
+                .retrieve().bodyToMono(String.class)
+                .timeout(Duration.ofMillis(props.getReadTimeout())).block();
     }
 
     // ==================== 内部 GET/DELETE 辅助 ====================

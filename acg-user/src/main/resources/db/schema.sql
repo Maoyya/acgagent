@@ -124,3 +124,18 @@ CREATE TABLE IF NOT EXISTS message (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '消息发送时间',
     INDEX idx_conversation_id_created_at (conversation_id, created_at)
 ) COMMENT '对话消息表';
+
+CREATE TABLE IF NOT EXISTS prompt_template (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键 ID，自增',
+    user_id BIGINT COMMENT '归属用户 ID；NULL=公共模板(管理员开放)，非 NULL=该用户的私有模板',
+    name VARCHAR(128) NOT NULL COMMENT '模板名称，生成时自动取首条 hint 截断，可后续修改',
+    system_prompt TEXT NOT NULL COMMENT '生成的系统提示词正文',
+    mode VARCHAR(16) NOT NULL DEFAULT 'acg' COMMENT '生成模式：acg-二次元, compliant-合规',
+    target_capabilities JSON COMMENT '能力标签数组，用于"不超能力"约束，如 ["chat","rag"]',
+    est_prompt_tokens INT COMMENT '生成时估算的 prompt token 数(缓存)，未估算为 NULL',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1-启用，0-禁用',
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除：0-未删除，1-已删除',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_user_id (user_id)
+) COMMENT '系统提示词模板表：公共库(user_id=NULL)+用户私有(user_id=非空)';

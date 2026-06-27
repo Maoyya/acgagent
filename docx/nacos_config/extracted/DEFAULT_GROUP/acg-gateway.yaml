@@ -9,4 +9,4 @@ spring:
         - id: agent-service
           uri: lb://acg-chat
           predicates:
-            - Path=/api/agents/**,/api/chat/**
+            - Path=/api/agents/**,/api/chat/**,/api/prompts/**
