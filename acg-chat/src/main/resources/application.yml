@@ -10,3 +10,8 @@ spring:
     nacos:
       config:
         namespace: acg_agent
+
+# 关闭 Dubbo QoS 诊断服务：默认占用 22222 端口，与 acg-user 同机启动会冲突（BindException）
+dubbo:
+  application:
+    qos-enable: false
