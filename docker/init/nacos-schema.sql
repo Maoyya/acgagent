@@ -3,8 +3,10 @@
  * 用于 Nacos 配置持久化到 MySQL
  */
 
-CREATE DATABASE IF NOT EXISTS nacos CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE nacos;
+-- nacos 配置表与业务表共用 acg_agent 业务库
+-- （已核对无表名冲突：nacos 表 users/roles/permissions/config_*/tenant_*/group_capacity/his_config_info
+--   与业务表 sys_user/sys_role/sys_permission/agent/conversation/message/sms_code/wx_user 无重名）
+USE acg_agent;
 
 CREATE TABLE IF NOT EXISTS `config_info` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'id',

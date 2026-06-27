@@ -26,9 +26,11 @@ services:
       SPRING_DATASOURCE_PLATFORM: mysql
       MYSQL_SERVICE_HOST: mysql
       MYSQL_SERVICE_PORT: 3306
-      MYSQL_SERVICE_DB_NAME: nacos
+      MYSQL_SERVICE_DB_NAME: acg_agent
       MYSQL_SERVICE_USER: root
       MYSQL_SERVICE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      # MySQL 8.0 默认 caching_sha2_password 认证，需放开公钥检索；nacos 配置表与业务表共用 acg_agent 库（已核对无表名冲突）
+      MYSQL_SERVICE_DB_PARAM: "characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=GMT%2B8"
     depends_on:
       mysql:
         condition: service_healthy
@@ -44,6 +46,8 @@ services:
       - "8858:8858"
 
   acg-user:
+    # 仅 COMPOSE_PROFILES=app docker-compose up 时启动；IDEA 默认一键运行只起中间件，应用在 IDEA 本地调试
+    profiles: ["app"]
     build:
       context: ..
       dockerfile: docker/user/Dockerfile
@@ -60,6 +64,8 @@ services:
       - mysql
 
   acg-chat:
+    # 仅 COMPOSE_PROFILES=app docker-compose up 时启动；IDEA 默认一键运行只起中间件
+    profiles: ["app"]
     build:
       context: ..
       dockerfile: docker/chat/Dockerfile
@@ -75,6 +81,8 @@ services:
       - mysql
 
   acg-gateway:
+    # 仅 COMPOSE_PROFILES=app docker-compose up 时启动；IDEA 默认一键运行只起中间件
+    profiles: ["app"]
     build:
       context: ..
       dockerfile: docker/gateway/Dockerfile
