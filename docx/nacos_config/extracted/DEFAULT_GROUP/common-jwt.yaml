@@ -1,4 +1,0 @@
-jwt:
-  secret: ${JWT_SECRET:acgagent-jwt-secret-key-must-be-at-least-256-bits-long-for-hs256}
-  access-token-expiration: ${JWT_ACCESS_EXP:7200000}
-  refresh-token-expiration: ${JWT_REFRESH_EXP:604800000}
