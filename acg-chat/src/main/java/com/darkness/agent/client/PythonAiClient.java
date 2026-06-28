@@ -10,6 +10,8 @@ import com.darkness.common.model.ToolCreateRequest;
 import com.darkness.common.model.ToolVO;
 import com.darkness.common.result.ResultCode;
 import com.darkness.common.enums.PromptMode;
+import com.darkness.common.model.PromptBeautifyRequest;
+import com.darkness.common.model.PromptBeautifyResponseVO;
 import com.darkness.common.model.PromptEstimateRequest;
 import com.darkness.common.model.PromptGenerateOutcome;
 import com.darkness.common.model.PromptGenerateRequest;
@@ -186,17 +188,7 @@ public class PythonAiClient {
         if (agent.getDescription() != null) body.put("description", agent.getDescription());
         if (agent.getSystemPrompt() != null) body.put("system_prompt", agent.getSystemPrompt());
 
-        Map<String, Object> llm = new LinkedHashMap<>();
-        // provider 是 Python 必填项（无默认），但 llm.py 并未实际使用它（OpenAI 兼容统一走 ChatOpenAI），
-        // 故 Java 无值时给默认 "openai"，避免老前端不传 provider 导致 Python 422
-        llm.put("provider", agent.getProvider() != null ? agent.getProvider() : "openai");
-        llm.put("model", agent.getModel());
-        llm.put("base_url", agent.getApiUrl());
-        llm.put("api_key", agent.getApiKey());
-        // temperature/max_tokens/top_p 在 Python 侧有默认值，仅当 Java 有值时发送，否则省略让 Python 补默认
-        if (agent.getTemperature() != null) llm.put("temperature", agent.getTemperature());
-        if (agent.getMaxTokens() != null) llm.put("max_tokens", agent.getMaxTokens());
-        if (agent.getTopP() != null) llm.put("top_p", agent.getTopP());
+        Map<String, Object> llm = buildLlmConfigMap(agent);
         body.put("llm_config", llm);
 
         // memory_config 有默认工厂，仅当有值时发送；否则省略让 Python 用默认（conversation_window / 8000）
@@ -212,6 +204,31 @@ public class PythonAiClient {
         if (agent.getKnowledgeBaseIds() != null) body.put("knowledge_base_ids", agent.getKnowledgeBaseIds());
         if (agent.getToolIds() != null) body.put("tool_ids", agent.getToolIds());
         return body;
+    }
+
+    /**
+     * 构造 Python llm_config 子对象（snake_case 键）。
+     * <p>
+     * 抽取自 buildCreateBody 以便 beautify 复用同一份 LLM 配置构造逻辑（DRY）。
+     * 行为与原内联实现完全一致：provider 缺省 "openai"（避免 Python 422）；
+     * temperature/max_tokens/top_p 仅当非 null 时放入，让 Python 补默认。
+     *
+     * @param agent 含真实 apiKey 的 Agent 原始 DO（不可用脱敏 VO）
+     * @return llm_config 映射
+     */
+    public Map<String, Object> buildLlmConfigMap(AgentDO agent) {
+        Map<String, Object> llm = new LinkedHashMap<>();
+        // provider 是 Python 必填项（无默认），但 llm.py 并未实际使用它（OpenAI 兼容统一走 ChatOpenAI），
+        // 故 Java 无值时给默认 "openai"，避免老前端不传 provider 导致 Python 422
+        llm.put("provider", agent.getProvider() != null ? agent.getProvider() : "openai");
+        llm.put("model", agent.getModel());
+        llm.put("base_url", agent.getApiUrl());
+        llm.put("api_key", agent.getApiKey());
+        // temperature/max_tokens/top_p 在 Python 侧有默认值，仅当 Java 有值时发送，否则省略让 Python 补默认
+        if (agent.getTemperature() != null) llm.put("temperature", agent.getTemperature());
+        if (agent.getMaxTokens() != null) llm.put("max_tokens", agent.getMaxTokens());
+        if (agent.getTopP() != null) llm.put("top_p", agent.getTopP());
+        return llm;
     }
 
     /**
@@ -404,6 +421,25 @@ public class PythonAiClient {
             body.put("target_capabilities", req.getTargetCapabilities());
         }
         return body;
+    }
+
+    /**
+     * 调 Python POST /api/v1/prompts/beautify（v1.1）。
+     * <p>
+     * 用所选 Agent 的 LLM（llm_config 来自 agent 原始 DO，含真实 apiKey）润色草稿 system_prompt。
+     * code != 200 由 extractData 抛 BizException。不校验、不落库——合规性由 Java create/update 的保存闸门统一校验。
+     *
+     * @param req    润色请求（草稿 systemPrompt + agentId + mode）
+     * @param agent  所选 Agent 原始 DO（构造 llm_config，须含真实 apiKey，不可用脱敏 VO）
+     * @param userId 当前用户 id，透传 X-User-Id
+     * @return 润色后的 system_prompt
+     */
+    public PromptBeautifyResponseVO beautifyPrompt(PromptBeautifyRequest req, AgentDO agent, Long userId) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("system_prompt", req.getSystemPrompt());
+        body.put("mode", req.getMode() != null ? req.getMode().getValue() : PromptMode.ACG.getValue());
+        body.put("llm_config", buildLlmConfigMap(agent));
+        return extractData(postJson("/api/v1/prompts/beautify", body, userId), PromptBeautifyResponseVO.class);
     }
 
     /**

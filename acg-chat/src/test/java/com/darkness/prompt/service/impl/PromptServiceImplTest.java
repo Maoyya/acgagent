@@ -2,12 +2,16 @@ package com.darkness.prompt.service.impl;
 
 import com.darkness.agent.client.PythonAiClient;
 import com.darkness.agent.service.AgentService;
+import com.darkness.common.entity.AgentDO;
 import com.darkness.common.entity.PromptTemplateDO;
 import com.darkness.common.exception.BizException;
+import com.darkness.common.mapper.AgentMapper;
 import com.darkness.common.mapper.PromptTemplateMapper;
 import com.darkness.common.model.AgentVO;
 import com.darkness.common.model.CostEstimateVO;
 import com.darkness.common.model.ModerationVerdictVO;
+import com.darkness.common.model.PromptBeautifyRequest;
+import com.darkness.common.model.PromptBeautifyResponseVO;
 import com.darkness.common.model.PromptEstimateRequest;
 import com.darkness.common.model.PromptGenerateOutcome;
 import com.darkness.common.model.PromptGenerateRequest;
@@ -33,17 +37,26 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-/** PromptService 单元测试。业务意义：生成物归属当前用户；403 是业务结果不落库；Python 500 透传（Fail Loud）。 */
+/** PromptService 单元测试。业务意义：v1.1 generate 只返回草稿不落库；beautify 用所选 Agent LLM 不校验；create/update 保存闸门拦截非法提示词；Python 500 透传（Fail Loud）。 */
 @ExtendWith(MockitoExtension.class)
 class PromptServiceImplTest {
 
     @Mock private PromptTemplateMapper promptTemplateMapper;
     @Mock private PythonAiClient pythonAiClient;
     @Mock private AgentService agentService;
+    @Mock private AgentMapper agentMapper;
     @InjectMocks private PromptServiceImpl promptService;
 
+    /** 构造 passed=true 裁决（保存闸门放行用）。 */
+    private static ModerationVerdictVO passedVerdict() {
+        ModerationVerdictVO v = new ModerationVerdictVO();
+        v.setPassed(true);
+        return v;
+    }
+
     @Test
-    void generate_success_persistsAsPrivateOfCurrentUser() {
+    void generate_success_returnsDraft_doesNotPersist() {
+        // v1.1：generate 不再自动落库，只返回草稿、无 templateId
         PromptGenerateRequest req = new PromptGenerateRequest();
         req.setUserHints(List.of("毒舌客服"));
         req.setMode(com.darkness.common.enums.PromptMode.ACG);
@@ -53,20 +66,13 @@ class PromptServiceImplTest {
         est.setPromptTokens(120);
         resp.setEstimate(est);
         when(pythonAiClient.generatePrompt(req, 7L)).thenReturn(PromptGenerateOutcome.success(resp));
-        when(promptTemplateMapper.insert(any(PromptTemplateDO.class))).thenAnswer(i -> {
-            i.getArgument(0, PromptTemplateDO.class).setId(1001L);
-            return 1;
-        });
 
         Result<PromptGenerateResponseVO> r = promptService.generate(req, 7L);
 
         assertThat(r.getCode()).isEqualTo(200);
-        ArgumentCaptor<PromptTemplateDO> captor = ArgumentCaptor.forClass(PromptTemplateDO.class);
-        verify(promptTemplateMapper).insert(captor.capture());
-        assertThat(captor.getValue().getUserId()).isEqualTo(7L);              // 归属当前用户
-        assertThat(captor.getValue().getName()).isEqualTo("毒舌客服");         // 首条 hint 截断取名
-        assertThat(captor.getValue().getEstPromptTokens()).isEqualTo(120);    // 缓存估算
-        assertThat(r.getData().getTemplateId()).isEqualTo(1001L);             // Java 追加
+        assertThat(r.getData().getSystemPrompt()).isEqualTo("你是毒舌客服"); // 返回草稿
+        // 业务意义：generate 不落库——前端拿到草稿后须显式调 create 才落库
+        verify(promptTemplateMapper, never()).insert(any(PromptTemplateDO.class));
     }
 
     @Test
@@ -98,6 +104,41 @@ class PromptServiceImplTest {
                 .isInstanceOf(BizException.class).extracting("code").isEqualTo(500);
         // any(PromptTemplateDO.class) 消除 BaseMapper.insert(T) / insert(Collection) 重载歧义
         verify(promptTemplateMapper, never()).insert(any(PromptTemplateDO.class));
+    }
+
+    // ==================== beautify (v1.1) ====================
+
+    @Test
+    void beautify_usesAgentLlm_returnsRefined_notPersisted() {
+        // 业务意义：beautify 用所选 Agent 的 LLM 润色，不校验、不落库（合规性在 create 闸门统一校验）
+        PromptBeautifyRequest req = new PromptBeautifyRequest();
+        req.setSystemPrompt("你是客服");
+        req.setAgentId(9L);
+        AgentDO agent = new AgentDO();
+        agent.setId(9L);
+        agent.setApiKey("real-key"); // 原始 DO 含真实 apiKey（非脱敏 VO）
+        when(agentMapper.selectById(9L)).thenReturn(agent);
+        PromptBeautifyResponseVO refined = new PromptBeautifyResponseVO();
+        refined.setSystemPrompt("你是专业的客服");
+        when(pythonAiClient.beautifyPrompt(eq(req), eq(agent), eq(7L))).thenReturn(refined);
+
+        Result<PromptBeautifyResponseVO> r = promptService.beautify(req, 7L);
+
+        assertThat(r.getCode()).isEqualTo(200);
+        assertThat(r.getData().getSystemPrompt()).isEqualTo("你是专业的客服");
+        verify(promptTemplateMapper, never()).insert(any(PromptTemplateDO.class)); // 不落库
+        verify(pythonAiClient, never()).moderatePrompt(any(PromptModerateRequest.class), anyLong()); // 不校验
+    }
+
+    @Test
+    void beautify_agentNotFound_throws404() {
+        PromptBeautifyRequest req = new PromptBeautifyRequest();
+        req.setSystemPrompt("x");
+        req.setAgentId(99L);
+        when(agentMapper.selectById(99L)).thenReturn(null);
+
+        assertThatThrownBy(() -> promptService.beautify(req, 7L))
+                .isInstanceOf(BizException.class).extracting("code").isEqualTo(ResultCode.NOT_FOUND.getCode());
     }
 
     // ==================== listTemplates ====================
@@ -149,8 +190,10 @@ class PromptServiceImplTest {
 
     @Test
     void createTemplate_nonAdminSetPublic_forbidden_403() {
+        // v1.1：闸门（moderate）在 isPublic 检查之前，故需 stub moderate→passed 才能走到 FORBIDDEN
         PromptTemplateRequest req = new PromptTemplateRequest();
         req.setName("N"); req.setSystemPrompt("s"); req.setIsPublic(true);
+        when(pythonAiClient.moderatePrompt(any(PromptModerateRequest.class), eq(7L))).thenReturn(passedVerdict());
         assertThatThrownBy(() -> promptService.createTemplate(req, 7L, false))
                 .isInstanceOf(BizException.class).extracting("code").isEqualTo(ResultCode.FORBIDDEN.getCode());
         // any(PromptTemplateDO.class) 消除 BaseMapper.insert(T) / insert(Collection) 重载歧义
@@ -161,6 +204,7 @@ class PromptServiceImplTest {
     void createTemplate_adminPublic_userIdNull() {
         PromptTemplateRequest req = new PromptTemplateRequest();
         req.setName("N"); req.setSystemPrompt("s"); req.setIsPublic(true);
+        when(pythonAiClient.moderatePrompt(any(PromptModerateRequest.class), eq(1L))).thenReturn(passedVerdict());
         when(promptTemplateMapper.insert(any(PromptTemplateDO.class))).thenAnswer(i -> {
             i.getArgument(0, PromptTemplateDO.class).setId(1L);
             return 1;
@@ -175,6 +219,7 @@ class PromptServiceImplTest {
     void createTemplate_userPrivate_userIdCurrentUser() {
         PromptTemplateRequest req = new PromptTemplateRequest();
         req.setName("N"); req.setSystemPrompt("s"); // isPublic 未置
+        when(pythonAiClient.moderatePrompt(any(PromptModerateRequest.class), eq(7L))).thenReturn(passedVerdict());
         when(promptTemplateMapper.insert(any(PromptTemplateDO.class))).thenAnswer(i -> {
             i.getArgument(0, PromptTemplateDO.class).setId(2L);
             return 1;
@@ -185,10 +230,42 @@ class PromptServiceImplTest {
         assertThat(captor.getValue().getUserId()).isEqualTo(7L); // 私有→当前用户
     }
 
+    @Test
+    void createTemplate_moderationBlocked_returns403_notPersisted() {
+        // 业务意义：保存闸门拦截非法提示词，绝不落库
+        PromptTemplateRequest req = new PromptTemplateRequest();
+        req.setName("N"); req.setSystemPrompt("违规内容");
+        ModerationVerdictVO blocked = new ModerationVerdictVO();
+        blocked.setPassed(false);
+        when(pythonAiClient.moderatePrompt(any(PromptModerateRequest.class), eq(7L))).thenReturn(blocked);
+
+        Result<PromptTemplateVO> r = promptService.createTemplate(req, 7L, false);
+
+        assertThat(r.getCode()).isEqualTo(403);
+        assertThat(r.getMessage()).isEqualTo("blocked");
+        assertThat((Object) r.getData()).isSameAs(blocked);
+        verify(promptTemplateMapper, never()).insert(any(PromptTemplateDO.class));
+    }
+
+    @Test
+    void createTemplate_pythonModerateDown_failsLoud() {
+        // 业务意义：保存闸门依赖 Python /moderate（强一致 #15），Python 挂 → 保存失败，绝不放行
+        PromptTemplateRequest req = new PromptTemplateRequest();
+        req.setName("N"); req.setSystemPrompt("s");
+        when(pythonAiClient.moderatePrompt(any(PromptModerateRequest.class), eq(7L)))
+                .thenThrow(new BizException(500, "moderate down"));
+
+        assertThatThrownBy(() -> promptService.createTemplate(req, 7L, false))
+                .isInstanceOf(BizException.class).extracting("code").isEqualTo(500);
+        verify(promptTemplateMapper, never()).insert(any(PromptTemplateDO.class));
+    }
+
     // ==================== updateTemplate / deleteTemplate ====================
 
     @Test
     void updateTemplate_otherUserPrivate_forbidden_403() {
+        // v1.1：updateTemplate = selectById → checkWritable(越权抛403) → moderate → update。
+        // 越权在闸门之前，故不会触发 moderate（无需 stub）。
         PromptTemplateDO tpl = new PromptTemplateDO();
         tpl.setId(1L); tpl.setUserId(1L); // 别人的私有
         when(promptTemplateMapper.selectById(1L)).thenReturn(tpl);
@@ -196,6 +273,33 @@ class PromptServiceImplTest {
         req.setName("N"); req.setSystemPrompt("s");
         assertThatThrownBy(() -> promptService.updateTemplate(1L, req, 999L, false))
                 .isInstanceOf(BizException.class).extracting("code").isEqualTo(ResultCode.FORBIDDEN.getCode());
+        verify(pythonAiClient, never()).moderatePrompt(any(PromptModerateRequest.class), anyLong()); // 越权不触发闸门
+    }
+
+    @Test
+    void updateTemplate_moderationBlocked_returns403_notUpdated() {
+        // 业务意义：改后提示词违规 → 不 update（改也要过闸门）
+        PromptTemplateDO tpl = new PromptTemplateDO();
+        tpl.setId(1L); tpl.setUserId(7L); // 自己的私有
+        when(promptTemplateMapper.selectById(1L)).thenReturn(tpl);
+        ModerationVerdictVO blocked = new ModerationVerdictVO();
+        blocked.setPassed(false);
+        when(pythonAiClient.moderatePrompt(any(PromptModerateRequest.class), eq(7L))).thenReturn(blocked);
+
+        Result<PromptTemplateVO> r = promptService.updateTemplate(1L,
+                buildTplReq("N", "违规"), 7L, false);
+
+        assertThat(r.getCode()).isEqualTo(403);
+        assertThat(r.getMessage()).isEqualTo("blocked");
+        verify(promptTemplateMapper, never()).updateById(any(PromptTemplateDO.class)); // 不 update
+    }
+
+    /** 构造最小 PromptTemplateRequest 辅助。 */
+    private static PromptTemplateRequest buildTplReq(String name, String systemPrompt) {
+        PromptTemplateRequest req = new PromptTemplateRequest();
+        req.setName(name);
+        req.setSystemPrompt(systemPrompt);
+        return req;
     }
 
     @Test

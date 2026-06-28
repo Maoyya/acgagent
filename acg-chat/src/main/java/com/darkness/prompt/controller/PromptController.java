@@ -4,6 +4,8 @@ import com.darkness.common.annotation.RequireRole;
 import com.darkness.common.enums.PromptMode;
 import com.darkness.common.model.CostEstimateVO;
 import com.darkness.common.model.ModerationVerdictVO;
+import com.darkness.common.model.PromptBeautifyRequest;
+import com.darkness.common.model.PromptBeautifyResponseVO;
 import com.darkness.common.model.PromptEstimateRequest;
 import com.darkness.common.model.PromptGenerateRequest;
 import com.darkness.common.model.PromptGenerateResponseVO;
@@ -32,15 +34,27 @@ public class PromptController {
     private final PromptService promptService;
 
     /**
-     * 生成系统提示词（调 Python generate→校验→估算→落库为当前用户私有模板）。
+     * 生成系统提示词草稿（v1.1：不落库、无 templateId）。
      * POST /api/prompts/generate（需登录）
      *
      * @param req 生成请求（userHints/mode/targetCapabilities）
-     * @return 200 成功带响应（含 templateId）；业务层 moderation 不通过时返回 code=403、message="blocked"、data=ModerationVerdict（HTTP 仍为 200，前端按 code 字段区分）
+     * @return 200 成功带草稿（systemPrompt/mode/moderation/estimate）；业务层 moderation 不通过时返回 code=403、message="blocked"、data=ModerationVerdict（HTTP 仍为 200，前端按 code 字段区分）
      */
     @PostMapping("/generate")
     public Result<PromptGenerateResponseVO> generate(@Valid @RequestBody PromptGenerateRequest req) {
         return promptService.generate(req, UserContext.getUserId());
+    }
+
+    /**
+     * 润色草稿（v1.1 新增）。用所选 Agent 的 LLM 润色草稿 system_prompt，返回润色后文本。
+     * POST /api/prompts/beautify（需登录）
+     *
+     * @param req 润色请求（草稿 systemPrompt + agentId + mode）
+     * @return 200 带润色后文本；不校验、不落库（合规性在后续 create 的保存闸门统一校验）
+     */
+    @PostMapping("/beautify")
+    public Result<PromptBeautifyResponseVO> beautify(@Valid @RequestBody PromptBeautifyRequest req) {
+        return promptService.beautify(req, UserContext.getUserId());
     }
 
     /**
@@ -92,28 +106,31 @@ public class PromptController {
     }
 
     /**
-     * 手建模板（用户建私有；admin 可 isPublic=true 建公共）。
+     * 统一「提交」落库（v1.1：手写/generate/beautify 产物经此落库；用户建私有，admin 可 isPublic=true 建公共）。
+     * 落库前过 moderation 闸门，blocked → code=403、message="blocked"、data=ModerationVerdict（不落库）。
      * POST /api/prompts/templates（需登录）
      *
      * @param req 模板请求（name、systemPrompt 必填；isPublic 仅 admin 可置 true）
-     * @return 创建后的模板视图对象
+     * @return 200 带创建后的模板视图对象；403 blocked 带裁决
      */
     @PostMapping("/templates")
     public Result<PromptTemplateVO> create(@Valid @RequestBody PromptTemplateRequest req) {
-        return Result.success(promptService.createTemplate(req, UserContext.getUserId(), UserContext.isAdmin()));
+        // service 现返回 Result（可能含 403+verdict），直接透传，不再包裹 Result.success
+        return promptService.createTemplate(req, UserContext.getUserId(), UserContext.isAdmin());
     }
 
     /**
-     * 更新模板（owner/admin；admin 可 isPublic=true 开放为公共）。
+     * 更新模板（owner/admin；admin 可 isPublic=true 开放为公共；落库前过 moderation 闸门）。
      * PUT /api/prompts/templates/{id}（需登录）
      *
      * @param id  模板主键
      * @param req 需要更新的模板字段
-     * @return 更新后的模板视图对象
+     * @return 200 带更新后的模板视图对象；403 blocked 带裁决
      */
     @PutMapping("/templates/{id}")
     public Result<PromptTemplateVO> update(@PathVariable Long id, @Valid @RequestBody PromptTemplateRequest req) {
-        return Result.success(promptService.updateTemplate(id, req, UserContext.getUserId(), UserContext.isAdmin()));
+        // service 现返回 Result（可能含 403+verdict），直接透传，不再包裹 Result.success
+        return promptService.updateTemplate(id, req, UserContext.getUserId(), UserContext.isAdmin());
     }
 
     /**

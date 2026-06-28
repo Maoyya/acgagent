@@ -5,7 +5,11 @@ import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 
-/** generate 成功响应（←Python，Java 落库后追加 templateId）。 */
+/**
+ * generate 成功响应（←Python）。
+ * v1.1：generate 不再自动落库，故响应只含草稿（systemPrompt + moderation + estimate），
+ * 不带 templateId——落库统一由 create 端点完成。
+ */
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class PromptGenerateResponseVO {
@@ -18,6 +22,4 @@ public class PromptGenerateResponseVO {
     private ModerationVerdictVO moderation;
     /** 消耗估算 */
     private CostEstimateVO estimate;
-    /** Java 落库后追加的模板 id；Python 响应不带。前端据此知道存了哪条模板 */
-    private Long templateId;
 }

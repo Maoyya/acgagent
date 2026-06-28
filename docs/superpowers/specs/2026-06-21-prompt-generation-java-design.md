@@ -1,8 +1,18 @@
 # 系统提示词生成功能 — Java 侧设计文档（Spec）
 
-> 版本：1.0.0 | 日期：2026-06-21 | 所属项目：acgagent（Java）
+> 版本：1.1.0 | 日期：2026-06-21（v1.1 修订 2026-06-22） | 所属项目：acgagent（Java）
 > 状态：待评审 → 通过后进入 writing-plans
 > 关联：Python 侧 spec `acgagent-ai/docs/superpowers/specs/2026-06-21-prompt-generation-design.md`
+
+> **v1.1 修订（2026-06-22）—— 流程重构，权威 delta：**
+> 1. **generate 不再自动落库**：只返回草稿（system_prompt + moderation + estimate），**不带 templateId、不写 DB**。落库统一到「提交(create)」。
+> 2. **新增 beautify（润色）**：`POST /api/prompts/beautify`，入参 草稿 system_prompt + agent_id → 取该 Agent 的 LLM 配置 → 调 Python `/api/v1/prompts/beautify`（用传入 llm_config）润色 → 返回润色后文本。**不校验、不落库**。
+> 3. **保存前 moderation 闸门**：`create`/`update` 在落库前调 Python `/moderate`；blocked → `Result(403,"blocked",verdict)` **不落库**。这是「避免非法提示词传入」的统一闸门，覆盖 generate/beautify/手写三条来源。
+> 4. **Python 不可用时强一致**：保存闸门依赖 Python `/moderate`；Python 挂 → 保存失败（明确报错），**绝不放行未校验提示词**（best-effort 会漏过非法内容，违背闸门初衷）。
+> 5. **「直接提交」= 手建 create**：用户手写 system_prompt（不经任何 LLM）→ create 走 moderation 闸门 → 落库。
+> 6. **路由层明确不做**（之前 §2.2 已是未来项，现确认放弃）：用户手动选 Agent 来 beautify，不做「后端路由 Agent」。
+>
+> 修订影响端点行为：generate（去 templateId/不落库）、新增 beautify、create/update（加 403 闸门）。决策 #8 失效（generate 不再落库），新增决策 #12–#15。
 
 ---
 
@@ -23,10 +33,14 @@ Python 侧（acgagent-ai）spec 定义了「系统提示词生成」能力：用
 | 5 | 403 blocked 返回 | **镜像 Python**：`Result(403,"blocked",ModerationVerdict)`，不抛、不落库 | Python spec 1.1#5 写死 |
 | 6 | service 层判 admin | 给 `UserContext` 加 `getRoles()/isAdmin()`（读 `X-User-Roles` 头） | 复用，不重复 RoleAuthAspect 逻辑 |
 | 7 | 手建端点 | **保留** `POST /api/prompts/templates`（不经 LLM 直接存） | 用户确认保留 |
-| 8 | generate 落库归属 | 生成物即**当前用户的私有模板**（user_id=当前用户）；要公共走 update 置 public | 用户确认流向 |
+| 8 | ~~generate 落库归属~~ | **v1.1 失效**：generate 不再自动落库（见 #12）。落库统一到 create | 流程重构 |
 | 9 | apply 搬运字段 | **只搬 system_prompt**，不动 mode/capabilities；复用 `AgentService.updateAgent` 同步 Python | 模板=提示词库，最小改动 |
 | 10 | 持久化范围 | 只缓存 `est_prompt_tokens`，不存完整 moderation 裁决（复检走 /moderate） | YAGNI |
 | 11 | Python 侧状态 | **尚未实现**（spec 待评审、`app/**/prompt*.py` 不存在）→ Java 按契约写 + 单测 mock PythonAiClient | Fail Loud，已与用户确认 |
+| 12 | generate 落库（v1.1） | **generate 不自动落库**，只返回草稿（无 templateId）；落库统一到 create | 流程图落库在最末；解耦生产与保存 |
+| 13 | beautify（v1.1） | 新增 `POST /api/prompts/beautify`：草稿 + agent_id → 用该 Agent 的 LLM（传 llm_config 给 Python）润色 → 返回文本；不校验/不落库 | 用户选 Agent 美化；apply 仍 admin-only |
+| 14 | 保存前 moderation 闸门（v1.1） | create/update 落库前必调 Python `/moderate`；blocked → 403 不落库。覆盖 generate/beautify/手写三来源 | 「避免非法提示词传入」统一闸门 |
+| 15 | Python 不可用（v1.1） | **强一致**：保存闸门依赖 Python `/moderate`，Python 挂 → 保存失败报错，不放行 | 闸门为安全控制，best-effort 会漏过非法内容 |
 
 ---
 
@@ -34,15 +48,16 @@ Python 侧（acgagent-ai）spec 定义了「系统提示词生成」能力：用
 
 ### 2.1 本期实现（Java 侧）
 
-1. **生成**：`POST /api/prompts/generate` → 调 Python generate → 处理 403 → 成功落库为私有模板 → 返回含 templateId
-2. **模板 CRUD**：list / get / 手建 create / update（含 admin 开放为公共）/ delete，双维度可见性与归属鉴权
-3. **moderate / estimate 封装**：转发 Python，供前端对已存/手写提示词复检、复估
-4. **apply-to-agent**（admin）：把模板 system_prompt 写入 Agent + 同步 Python
+1. **生成**：`POST /api/prompts/generate` → 调 Python generate → 处理 403 → **只返回草稿（不落库、无 templateId）**
+2. **润色 beautify（v1.1）**：`POST /api/prompts/beautify` → 用所选 Agent 的 LLM 润色草稿 → 返回文本（不校验/不落库）
+3. **模板 CRUD（含保存前 moderation 闸门）**：list / get / create / update / delete；**create/update 落库前调 `/moderate`，blocked→403 不落库**；admin 可开放为公共
+4. **moderate / estimate 封装**：转发 Python（moderate = 保存闸门；estimate 独立估算）
+5. **apply-to-agent**（admin）：把模板 system_prompt 写入 Agent + 同步 Python
 
 ### 2.2 不在本期范围
 
 - Python 侧任何实现（归属 acgagent-ai）
-- 用户私有模板参与「后端路由 Agent」的路由层逻辑（未来）
+- 「后端路由 Agent」路由层（用户无感、后端选 Agent）—— **v1.1 确认放弃**；用户改为**手动选 Agent 做 beautify**
 - Agent 改为 per-user（明确不动）
 - moderation 多裁判投票、生成后真实 usage、偏好推荐接口（Python 二期）
 - 前端模板选择 UI
@@ -59,7 +74,9 @@ acg-common
 ├─ model/    PromptGenerateRequest         （新，→ Python）
 │            PromptModerateRequest         （新，→ Python）
 │            PromptEstimateRequest         （新，→ Python）
-│            PromptGenerateResponseVO      （新，← Python，带 Java 追加的 templateId）
+│            PromptGenerateResponseVO      （新，← Python；v1.1 起**不带 templateId**）
+│            PromptBeautifyRequest         （新 v1.1，→ Python beautify：草稿 + 所选 Agent 的 llm_config）
+│            PromptBeautifyResponseVO      （新 v1.1，← Python beautify：润色后 system_prompt）
 │            ModerationVerdictVO           （新，← Python）
 │            CostEstimateVO                （新，← Python）
 │            PromptGenerateOutcome         （新，generate 的成功/ blocked 值对象）
@@ -70,7 +87,7 @@ acg-common
 └─ result/   Result                        （不改：403 用 public 全参构造 new Result<>(403,"blocked",verdict)）
 
 acg-chat
-├─ agent/client/PythonAiClient             （改：加 Prompt 段 —— generatePrompt/moderatePrompt/estimatePrompt）
+├─ agent/client/PythonAiClient             （改：加 Prompt 段 —— generatePrompt/beautifyPrompt/moderatePrompt/estimatePrompt）
 ├─ prompt/service/PromptService            （新，接口）
 ├─ prompt/service/impl/PromptServiceImpl   （新）
 └─ prompt/controller/PromptController      （新，/api/prompts）
@@ -159,6 +176,19 @@ public PromptGenerateOutcome generatePrompt(PromptGenerateRequest req, Long user
     throw new BizException(code, root.path("message").asText("Python generate prompt failed"));
 }
 
+/**
+ * 调 Python POST /api/v1/prompts/beautify（v1.1）。
+ * 用所选 Agent 的 LLM（llm_config 来自 agent）润色草稿；code != 200 走 extractData 抛。
+ * 不校验、不落库（保存闸门在 Java create/update 的 moderate）。
+ */
+public PromptBeautifyResponseVO beautifyPrompt(PromptBeautifyRequest req, AgentDO agent, Long userId) {
+    Map<String, Object> body = new LinkedHashMap<>();
+    body.put("system_prompt", req.getSystemPrompt());
+    body.put("mode", req.getMode() != null ? req.getMode().getValue() : PromptMode.ACG.getValue());
+    body.put("llm_config", buildLlmConfigMap(agent));   // 复用 buildCreateBody 里 llm_config 的构造逻辑
+    return extractData(postJson("/api/v1/prompts/beautify", body, userId), PromptBeautifyResponseVO.class);
+}
+
 /** 调 Python POST /api/v1/prompts/moderate，返回裁决（code != 200 走 extractData 抛）。 */
 public ModerationVerdictVO moderatePrompt(PromptModerateRequest req, Long userId) { ... extractData ... }
 
@@ -213,7 +243,7 @@ public static boolean isAdmin() { return getRoles().contains("admin"); }
 | 操作 | 公共模板(user_id=NULL) | 别人的私有 | 自己的私有 |
 |---|---|---|---|
 | 读 / 列表 | 所有登录用户 | 仅 admin | 自己 |
-| 创建(generate / 手建) | — | — | 自己；admin 手建可置 `public=true` 建公共 |
+| 创建(create = 统一提交) | — | — | 自己；admin 可置 `public=true` 建公共（v1.1：generate 不再创建，落库统一到 create） |
 | 改 / 删 | 仅 admin | 仅 admin | 自己 |
 
 **owner-or-admin 判断**（service 内）：`currentUserId.equals(tpl.getUserId()) || UserContext.isAdmin()`，否则抛 `BizException(FORBIDDEN)`。
@@ -234,13 +264,14 @@ public static boolean isAdmin() { return getRoles().contains("admin"); }
 
 | 方法 | 路径 | 认证 | 说明 |
 |---|---|---|---|
-| POST | `/api/prompts/generate` | 登录 | 生成→403 则返回 verdict 不落库→成功落库为当前用户私有模板→返回含 templateId |
-| POST | `/api/prompts/moderate` | 登录 | 封装 Python，复检 system_prompt |
+| POST | `/api/prompts/generate` | 登录 | 生成**草稿**（不落库、无 templateId）；403 返回 verdict |
+| POST | `/api/prompts/beautify` | 登录 | **v1.1**：草稿 + agent_id → 用该 Agent LLM 润色 → 返回文本（不校验/不落库） |
+| POST | `/api/prompts/moderate` | 登录 | 封装 Python，复检 system_prompt（亦供前端独立调用） |
 | POST | `/api/prompts/estimate` | 登录 | 封装 Python，独立消耗估算 |
 | GET | `/api/prompts/templates` | 登录 | 列表：公共 + 自己私有（admin 看全部） |
 | GET | `/api/prompts/templates/{id}` | 登录 | 单条（可见性校验：越权 403，不存在 404） |
-| POST | `/api/prompts/templates` | 登录 | 手建：用户建私有；admin 可 `public=true` 建公共 |
-| PUT | `/api/prompts/templates/{id}` | owner/admin | 改；admin 可 `public=true` 开放为公共 |
+| POST | `/api/prompts/templates` | 登录 | **统一「提交」**：手写/generate/beautify 产物经此落库；**落库前 moderate，blocked→403 不落库**；用户建私有/admin 可 `public=true` 公共 |
+| PUT | `/api/prompts/templates/{id}` | owner/admin | 改；**落库前 moderate，blocked→403**；admin 可 `public=true` 开放为公共 |
 | DELETE | `/api/prompts/templates/{id}` | owner/admin | 逻辑删 |
 | POST | `/api/prompts/templates/{id}/apply/{agentId}` | **admin** | apply-to-agent |
 
@@ -254,7 +285,7 @@ public static boolean isAdmin() { return getRoles().contains("admin"); }
 // Header: Authorization, X-User-Id(网关注入)
 ```
 
-成功响应（code=200）：
+成功响应（code=200，**只返回草稿，不落库、无 templateId**）：
 ```jsonc
 {
   "code": 200, "message": "success",
@@ -262,8 +293,7 @@ public static boolean isAdmin() { return getRoles().contains("admin"); }
     "systemPrompt": "你是一名...",
     "mode": "acg",
     "moderation": { "passed": true, "violatedRules": [], "reasons": [], "confidence": 0.95, "mode": "acg" },
-    "estimate": { "promptTokens": 120, "estCompletionTokens": 0, "model": "deepseek-chat" },
-    "templateId": 1001
+    "estimate": { "promptTokens": 120, "estCompletionTokens": 0, "model": "deepseek-chat" }
   }
 }
 ```
@@ -280,29 +310,32 @@ public static boolean isAdmin() { return getRoles().contains("admin"); }
 
 ## 8. 核心逻辑
 
-### 8.1 generate 编排（`PromptServiceImpl.generate`）
+### 8.1 generate 编排（`PromptServiceImpl.generate`，v1.1：**不落库**）
 
 ```
-generate(req):
-  userId = UserContext.getUserId()                      // 网关已鉴权，必有
-  outcome = pythonAiClient.generatePrompt(req, userId)  // LLM #1 + LLM #2，403 不抛
+generate(req, userId):
+  outcome = pythonAiClient.generatePrompt(req, userId)  // LLM 生成 + 内部 moderation，403 不抛
   if outcome.isBlocked():
-      return new Result<>(403, "blocked", outcome.getVerdict())   // 不落库
-  resp = outcome.getSuccess()
-  // 落库为当前用户私有模板
-  tpl = new PromptTemplateDO()
-  tpl.setUserId(userId)
-  tpl.setName(autoName(req.getUserHints()))             // 首条 hint 截断 32 字，空则 "提示词-{mode}"
-  tpl.setSystemPrompt(resp.getSystemPrompt())
-  tpl.setMode(req.getMode())
-  tpl.setTargetCapabilities(req.getTargetCapabilities())
-  tpl.setEstPromptTokens(resp.getEstimate().getPromptTokens())
-  templateMapper.insert(tpl)
-  resp.setTemplateId(tpl.getId())                       // Java 追加，Python 响应不带
-  return Result.success(resp)
+      return new Result<>(403, "blocked", outcome.getVerdict())   // 草稿本身违规 → 不返回草稿
+  return Result.success(outcome.getSuccess())           // 只返回草稿，不落库、无 templateId
 ```
 
-### 8.2 apply-to-agent（admin-only，`PromptServiceImpl.applyToAgent`）
+> 落库统一到 create（§8.4）：前端拿草稿（或 beautify 后/手写）→ 调 `POST /api/prompts/templates`。
+> `autoName` 辅助方法保留，改由 create 在落库时取名（首条 hint 截断 32 字，空则「提示词-{mode}」）。
+
+### 8.2 beautify 编排（`PromptServiceImpl.beautify`，v1.1 新增）
+
+```
+beautify(req, userId):   // req: 草稿 systemPrompt + agentId + mode
+  agent = agentMapper.selectById(req.getAgentId())         // 不存在 → BizException(NOT_FOUND)
+  resp = pythonAiClient.beautifyPrompt(req, agent, userId) // 用该 Agent 的 LLM 润色，不校验
+  return Result.success(resp)                              // 返回润色后文本，不落库
+```
+
+> beautify 不做 moderation（Python 端也不校验）；合规性在后续 create/update 的保存闸门统一校验。
+> Agent 仍 admin 配置、apply 仍 admin-only；用户此处只是「借用 Agent 的 LLM 做润色」，不改变 Agent 归属模型。
+
+### 8.3 apply-to-agent（admin-only，`PromptServiceImpl.applyToAgent`）
 
 ```
 applyToAgent(templateId, agentId):   // Controller 标 @RequireRole("admin")
@@ -316,20 +349,22 @@ applyToAgent(templateId, agentId):   // Controller 标 @RequireRole("admin")
 > 复用 `AgentServiceImpl.updateAgent` 自带的 `pythonAiClient.updateAgent` 同步，不另写同步逻辑。
 > `apiKey` 脱敏值回传问题：`AgentService.updateAgent` 已处理 "******" 保留原值，故 from(脱敏 VO) 回写安全。
 
-### 8.3 CRUD（`PromptServiceImpl`，带归属鉴权）
+### 8.4 CRUD（`PromptServiceImpl`，带归属鉴权 + **保存前 moderation 闸门**）
 
 - `listTemplates()`：按 §6.3 查询，DO → VO（`PromptTemplateVO`）。
 - `getTemplate(id)`：取出后做可见性校验（公共 / 自己 / admin），越权 `FORBIDDEN`，不存在 `NOT_FOUND`。
-- `createTemplate(req)`：
-  - 非管理员：强制 `user_id = 当前用户`；若 `req.public==true` → `FORBIDDEN`。
-  - 管理员：`req.public==true` → `user_id=NULL`（公共）；否则 `user_id=当前 admin`。
-  - 必填校验：name、systemPrompt 非空。
-- `updateTemplate(id, req)`：先取模板，校验 owner-or-admin；admin 可改 `public`；非 admin 不能改 `user_id`（即不能把自己的模板改成别人的，也不能改公共性）。
-- `deleteTemplate(id)`：校验 owner-or-admin；逻辑删（deleted=1）。
+- `createTemplate(req)`（= 统一「提交」，覆盖 手写/generate/beautify 三来源）：
+  - **保存闸门**：`moderate(systemPrompt, mode)` → 若 `!passed` → `return new Result<>(403,"blocked",verdict)`，**不落库**。
+  - 通过则：非管理员 `user_id=当前用户`（`public==true`→`FORBIDDEN`）；管理员 `public==true`→`user_id=NULL`（公共）。
+  - name 缺省时 autoName 取名；必填校验 name、systemPrompt 非空。
+- `updateTemplate(id, req)`：先取模板，校验 owner-or-admin；**保存闸门**：moderate 新 systemPrompt，blocked→403 不 update；通过则 update（admin 可改 `public`）。
+- `deleteTemplate(id)`：校验 owner-or-admin；逻辑删（deleted=1）。删除不引入新内容，不走闸门。
 
-### 8.4 moderate / estimate 转发
+> 保存闸门使 create/update 依赖 Python `/moderate` 在线；Python 不可用 → 保存失败（强一致 #15）。moderate 复用 `pythonAiClient.moderatePrompt`；Python 故障抛 500。
 
-直接转发 Python，`userId` 透传，`extractData` 解析。无落库。
+### 8.5 moderate / estimate 转发
+
+直接转发 Python，`userId` 透传，`extractData` 解析。无落库。（moderate 端点亦供前端独立复检；保存闸门内部复用它。）
 
 ---
 
@@ -340,6 +375,7 @@ applyToAgent(templateId, agentId):   // Controller 标 @RequireRole("admin")
 | moderation 不通过（Python code=403） | `new Result<>(403,"blocked",verdict)`，**不落库、不抛** |
 | mode 非法 | Java 枚举绑定失败 → GlobalExceptionHandler → 400 |
 | Python api_key 缺失 / LLM 失败 / structured 解析失败 | Python 返回 500 → PythonAiClient 抛 `BizException(500)` → 500 |
+| create/update 保存闸门时 Python `/moderate` 不可用（v1.1） | **强一致**：PythonAiClient 抛 `BizException(500)` → 保存失败，**绝不放行未校验提示词** |
 | 模板不存在 | `BizException(NOT_FOUND)` → 404 |
 | 越权访问/改/删他人私有、普通用户置 public | `BizException(FORBIDDEN)` → 403 |
 | apply 目标 Agent 不存在 | 复用 `getAgentById` → 404 |
@@ -354,11 +390,17 @@ Python 未实现，所有 Python 交互通过 mock `PythonAiClient` 验证。关
 
 | 用例 | 验证意图 |
 |---|---|
-| `generate_success_persistsAsPrivateOfCurrentUser` | 成功 → 落库 user_id=当前用户、返回 templateId | 生成物归属正确 |
-| `generate_blocked_returns403AndDoesNotPersist` | mock 返回 blocked → 返回 code=403 + verdict、模板表无新增 | 403 是业务结果非错误 |
+| `generate_success_returnsDraft_doesNotPersist`（v1.1 改） | 成功 → 返回草稿、**无 templateId、模板表无新增** | generate 不落库 |
+| `generate_blocked_returns403` | mock blocked → 返回 403 + verdict | 草稿违规不返回 |
 | `generate_python500_throwsBiz` | mock 抛 BizException(500) → 透出 500 | Fail Loud |
+| `beautify_usesAgentLlm_returnsRefined`（v1.1 新） | 传 agentId → 取该 Agent LLM 调 Python beautify、返回润色文本、**不落库、不 moderate** | beautify 用所选 Agent LLM |
+| `beautify_agentNotFound_404`（v1.1 新） | agentId 不存在 → 404 | 边界 |
+| `create_moderationBlocked_returns403_doesNotPersist`（v1.1 新） | moderate 返回 blocked → create 返 403、**不 insert** | 保存闸门拦截非法提示词 |
+| `create_moderationPassed_persists`（v1.1 新） | moderate 通过 → 正常 insert | 闸门放行合法提示词 |
+| `update_moderationBlocked_returns403_doesNotUpdate`（v1.1 新） | 改后 moderate blocked → 403、不 update | 改也要过闸门 |
+| `create_pythonModerateDown_failsLoud`（v1.1 新） | moderate 抛 500 → create 抛 500 不落库 | 强一致 #15 |
 | `estimate_scalesWithPromptLength` | prompt 越长 promptTokens 越大 | 估算是真的 |
-| `apply_updatesAgentSystemPromptAndSyncsPython` | apply → agent.systemPrompt 被改 + 触发 updateAgent(Python 同步) | apply 生效，只搬 system_prompt |
+| `apply_updatesAgentSystemPromptAndSyncsPython` | apply → agent.systemPrompt 被改 + 触发 updateAgent | apply 生效，只搬 system_prompt |
 | `list_userSeesPublicAndOwnPrivateOnly` | 非admin 列表不含他人私有；admin 含全部 | 双维度可见性 |
 | `update_otherUserPrivate_forbidden` | 非 owner 非 admin 改/删他人私有 → 403 | 隔离生效 |
 | `create_nonAdminSetPublic_forbidden` | 普通用户 public=true → 403；admin public=true → user_id=NULL | 「开放公共」仅 admin |
@@ -387,4 +429,5 @@ Python 未实现，所有 Python 交互通过 mock `PythonAiClient` 验证。关
 - **假设**：Python 侧 prompt 接口按其 spec 实现后，契约（路径、字段、Result 信封、403 语义）与本文一致；Python 侧尚未实现，Java 暂以 mock 单测覆盖。
 - **假设**：`/api/prompts/**` 经 acg-chat 既有路由可达，无需新增 Gateway 路由；GET 类模板查询是否需免认证由 Gateway 白名单决定（默认需登录，与私有模板语义一致）。
 - **待办（plan 阶段确认）**：Gateway 路由/白名单是否需调整；是否需 changelog（涉及新表 + 新 API，按 CLAUDE.md 变更管理「数据库表结构变更/接口新增」需 `docs/changelogs/` 记录）。
-- **未来扩展（不在本期）**：用户私有模板参与后端 Agent 路由；Agent per-user 化；Python 二期多裁判/真实 usage/推荐接口。
+- **未来扩展（不在本期）**：Agent per-user 化；Python 二期多裁判/真实 usage/推荐接口。（「后端路由 Agent」路由层 **v1.1 已确认放弃**；用户改用手动选 Agent 做 beautify。）
+- **v1.1 跨仓库依赖**：beautify 与保存闸门依赖 **Python spec v1.1**（新增 `/api/v1/prompts/beautify` 端点 + 接受 `llm_config`）。Python 侧未实现前，generate/beautify/moderate/estimate 端到端 blocked；**模板 CRUD 的保存闸门也依赖 Python `/moderate` 在线（强一致 #15）**——这是 v1.1 引入的新依赖，CRUD 不再完全 Python 无关。

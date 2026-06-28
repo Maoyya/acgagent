@@ -31,14 +31,14 @@ class PromptVoParsingTest {
     }
 
     @Test
-    void promptGenerateResponseVO_fromPythonSnakeCase_templateIdNull() throws Exception {
+    void promptGenerateResponseVO_fromPythonSnakeCase() throws Exception {
+        // v1.1：generate 响应只含草稿（systemPrompt/mode/moderation/estimate），不带 templateId
         String json = "{\"system_prompt\":\"你是...\",\"mode\":\"acg\","
                 + "\"moderation\":{\"passed\":true,\"violated_rules\":[],\"reasons\":[],\"confidence\":0.95,\"mode\":\"acg\"},"
                 + "\"estimate\":{\"prompt_tokens\":120,\"est_completion_tokens\":0,\"model\":\"deepseek-chat\"}}";
         PromptGenerateResponseVO r = mapper.readValue(json, PromptGenerateResponseVO.class);
         assertThat(r.getSystemPrompt()).isEqualTo("你是...");
         assertThat(r.getMode()).isEqualTo(PromptMode.ACG);
-        assertThat(r.getTemplateId()).isNull(); // Python 不带，Java 落库后填
         assertThat(r.getModeration().getPassed()).isTrue();
         assertThat(r.getEstimate().getPromptTokens()).isEqualTo(120);
     }
