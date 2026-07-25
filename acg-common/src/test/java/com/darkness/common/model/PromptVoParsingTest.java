@@ -42,19 +42,4 @@ class PromptVoParsingTest {
         assertThat(r.getModeration().getPassed()).isTrue();
         assertThat(r.getEstimate().getPromptTokens()).isEqualTo(120);
     }
-
-    @Test
-    void outcome_factories() {
-        PromptGenerateResponseVO s = new PromptGenerateResponseVO();
-        PromptGenerateOutcome ok = PromptGenerateOutcome.success(s);
-        assertThat(ok.isBlocked()).isFalse();
-        assertThat(ok.getSuccess()).isSameAs(s);
-        assertThat(ok.getVerdict()).isNull();
-
-        ModerationVerdictVO v = new ModerationVerdictVO();
-        PromptGenerateOutcome blocked = PromptGenerateOutcome.blocked(v);
-        assertThat(blocked.isBlocked()).isTrue();
-        assertThat(blocked.getVerdict()).isSameAs(v);
-        assertThat(blocked.getSuccess()).isNull();
-    }
 }

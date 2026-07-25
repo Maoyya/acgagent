@@ -9,13 +9,12 @@ import com.darkness.common.mapper.AgentMapper;
 import com.darkness.common.mapper.PromptTemplateMapper;
 import com.darkness.common.model.AgentVO;
 import com.darkness.common.model.CostEstimateVO;
+import com.darkness.common.model.GenerateStreamEvent;
 import com.darkness.common.model.ModerationVerdictVO;
 import com.darkness.common.model.PromptBeautifyRequest;
 import com.darkness.common.model.PromptBeautifyResponseVO;
 import com.darkness.common.model.PromptEstimateRequest;
-import com.darkness.common.model.PromptGenerateOutcome;
 import com.darkness.common.model.PromptGenerateRequest;
-import com.darkness.common.model.PromptGenerateResponseVO;
 import com.darkness.common.model.PromptModerateRequest;
 import com.darkness.common.model.PromptTemplateRequest;
 import com.darkness.common.model.PromptTemplateVO;
@@ -27,6 +26,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
@@ -37,7 +37,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-/** PromptService 单元测试。业务意义：v1.1 generate 只返回草稿不落库；beautify 用所选 Agent LLM 不校验；create/update 保存闸门拦截非法提示词；Python 500 透传（Fail Loud）。 */
+/** PromptService 单元测试。业务意义：generate 现为纯转发 Python SSE 流（不落库、不校验）；beautify 用所选 Agent LLM 不校验；create/update 保存闸门拦截非法提示词；Python 500 透传（Fail Loud）。 */
 @ExtendWith(MockitoExtension.class)
 class PromptServiceImplTest {
 
@@ -55,54 +55,24 @@ class PromptServiceImplTest {
     }
 
     @Test
-    void generate_success_returnsDraft_doesNotPersist() {
-        // v1.1：generate 不再自动落库，只返回草稿、无 templateId
+    void generate_delegatesToClientStream() {
+        // 业务意义：generate 现为纯转发——直接返回 Python SSE 流，不落库、不校验、不组装 Result
         PromptGenerateRequest req = new PromptGenerateRequest();
         req.setUserHints(List.of("毒舌客服"));
-        req.setMode(com.darkness.common.enums.PromptMode.ACG);
-        PromptGenerateResponseVO resp = new PromptGenerateResponseVO();
-        resp.setSystemPrompt("你是毒舌客服");
-        CostEstimateVO est = new CostEstimateVO();
-        est.setPromptTokens(120);
-        resp.setEstimate(est);
-        when(pythonAiClient.generatePrompt(req, 7L)).thenReturn(PromptGenerateOutcome.success(resp));
+        GenerateStreamEvent content = new GenerateStreamEvent();
+        content.setType("content");
+        content.setContent("你是");
+        GenerateStreamEvent done = new GenerateStreamEvent();
+        done.setType("done");
+        when(pythonAiClient.streamGeneratePrompt(req, 7L)).thenReturn(Flux.just(content, done));
 
-        Result<PromptGenerateResponseVO> r = promptService.generate(req, 7L);
+        java.util.List<GenerateStreamEvent> events = promptService.generate(req, 7L).toStream().toList();
 
-        assertThat(r.getCode()).isEqualTo(200);
-        assertThat(r.getData().getSystemPrompt()).isEqualTo("你是毒舌客服"); // 返回草稿
-        // 业务意义：generate 不落库——前端拿到草稿后须显式调 create 才落库
-        verify(promptTemplateMapper, never()).insert(any(PromptTemplateDO.class));
-    }
-
-    @Test
-    void generate_blocked_returns403AndDoesNotPersist() {
-        PromptGenerateRequest req = new PromptGenerateRequest();
-        req.setUserHints(List.of("暴力内容"));
-        ModerationVerdictVO v = new ModerationVerdictVO();
-        v.setPassed(false);
-        when(pythonAiClient.generatePrompt(req, 7L)).thenReturn(PromptGenerateOutcome.blocked(v));
-
-        Result<PromptGenerateResponseVO> r = promptService.generate(req, 7L);
-
-        assertThat(r.getCode()).isEqualTo(403);
-        assertThat(r.getMessage()).isEqualTo("blocked");
-        // 接口签名为 Result<PromptGenerateResponseVO>，403 时 data 运行期装的是裁决对象；
-        // 用 Object 重载避免编译期 checkcast(PromptGenerateResponseVO) 抛 ClassCastException
-        assertThat((Object) r.getData()).isSameAs(v);
-        // any(PromptTemplateDO.class) 消除 BaseMapper.insert(T) / insert(Collection) 重载歧义
-        verify(promptTemplateMapper, never()).insert(any(PromptTemplateDO.class));
-    }
-
-    @Test
-    void generate_python500_propagates_doesNotPersist() {
-        PromptGenerateRequest req = new PromptGenerateRequest();
-        req.setUserHints(List.of("x"));
-        when(pythonAiClient.generatePrompt(req, 7L)).thenThrow(new BizException(500, "llm down"));
-
-        assertThatThrownBy(() -> promptService.generate(req, 7L))
-                .isInstanceOf(BizException.class).extracting("code").isEqualTo(500);
-        // any(PromptTemplateDO.class) 消除 BaseMapper.insert(T) / insert(Collection) 重载歧义
+        assertThat(events).hasSize(2);
+        assertThat(events.get(0).getType()).isEqualTo("content");
+        assertThat(events.get(0).getContent()).isEqualTo("你是");
+        assertThat(events.get(1).getType()).isEqualTo("done");
+        // 业务意义：generate 不落库——前端拿到流后须显式调 create 才落库
         verify(promptTemplateMapper, never()).insert(any(PromptTemplateDO.class));
     }
 

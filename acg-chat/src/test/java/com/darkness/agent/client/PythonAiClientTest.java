@@ -4,7 +4,7 @@ import com.darkness.common.exception.BizException;
 import com.darkness.common.model.ChatEvent;
 import com.darkness.common.result.ResultCode;
 import com.darkness.common.enums.PromptMode;
-import com.darkness.common.model.PromptGenerateOutcome;
+import com.darkness.common.model.GenerateStreamEvent;
 import com.darkness.common.model.PromptGenerateRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -159,28 +159,36 @@ class PythonAiClientTest {
     }
 
     @Test
-    void parseGenerateOutcome_success_returnsSuccessOutcome() {
-        String json = "{\"code\":200,\"data\":{\"system_prompt\":\"你是...\",\"mode\":\"acg\","
-                + "\"moderation\":{\"passed\":true},\"estimate\":{\"prompt_tokens\":120,\"est_completion_tokens\":0,\"model\":\"deepseek-chat\"}}}";
-        PromptGenerateOutcome o = client.parseGenerateOutcome(json);
-        assertThat(o.isBlocked()).isFalse();
-        assertThat(o.getSuccess().getSystemPrompt()).isEqualTo("你是...");
-        assertThat(o.getSuccess().getEstimate().getPromptTokens()).isEqualTo(120);
+    void parseGenerateStreamEvent_contentEvent() {
+        // 业务意义：Python generate SSE content 事件需正确反序列化为流式 token 片段
+        GenerateStreamEvent event = client.parseGenerateStreamEvent("{\"type\":\"content\",\"content\":\"你是\"}");
+        assertThat(event.getType()).isEqualTo("content");
+        assertThat(event.getContent()).isEqualTo("你是");
     }
 
     @Test
-    void parseGenerateOutcome_blocked_returnsBlockedOutcome_notThrow() {
-        String json = "{\"code\":403,\"message\":\"blocked\",\"data\":{\"passed\":false,\"violated_rules\":[\"r\"],\"mode\":\"compliant\"}}";
-        PromptGenerateOutcome o = client.parseGenerateOutcome(json);
-        assertThat(o.isBlocked()).isTrue();
-        assertThat(o.getVerdict().getPassed()).isFalse();
+    void parseGenerateStreamEvent_doneEvent_mapsSnakeCaseEstimate() {
+        // 业务意义：done 事件携带消耗估算，CostEstimateVO 已声明 @JsonAlias 处理 snake_case
+        String json = "{\"type\":\"done\",\"estimate\":{\"prompt_tokens\":120,\"est_completion_tokens\":0,\"model\":\"deepseek-chat\"}}";
+        GenerateStreamEvent event = client.parseGenerateStreamEvent(json);
+        assertThat(event.getType()).isEqualTo("done");
+        assertThat(event.getEstimate().getPromptTokens()).isEqualTo(120);
+        assertThat(event.getEstimate().getEstCompletionTokens()).isEqualTo(0);
+        assertThat(event.getEstimate().getModel()).isEqualTo("deepseek-chat");
     }
 
     @Test
-    void parseGenerateOutcome_python500_throwsBizWithCode() {
-        assertThatThrownBy(() -> client.parseGenerateOutcome("{\"code\":500,\"message\":\"llm down\"}"))
+    void parseGenerateStreamEvent_errorEvent() {
+        GenerateStreamEvent event = client.parseGenerateStreamEvent("{\"type\":\"error\",\"message\":\"llm down\"}");
+        assertThat(event.getType()).isEqualTo("error");
+        assertThat(event.getMessage()).isEqualTo("llm down");
+    }
+
+    @Test
+    void parseGenerateStreamEvent_invalidJson_throwsBiz() {
+        assertThatThrownBy(() -> client.parseGenerateStreamEvent("not-json"))
                 .isInstanceOf(BizException.class)
-                .extracting("code").isEqualTo(500);
+                .extracting("code").isEqualTo(ResultCode.SERVICE_UNAVAILABLE.getCode());
     }
 
     @Test
@@ -193,5 +201,30 @@ class PythonAiClientTest {
         assertThat(body).containsEntry("user_hints", java.util.List.of("毒舌客服"));
         assertThat(body).containsEntry("mode", "compliant");
         assertThat(body).containsEntry("target_capabilities", java.util.List.of("chat"));
+    }
+
+    // ==================== stripSseData（SSE 前缀兼容）====================
+
+    @Test
+    void stripSseData_withDataPrefix() {
+        // StringDecoder 路径：整行带 "data:" 前缀
+        assertThat(client.stripSseData("data: {\"type\":\"content\",\"content\":\"x\"}"))
+                .isEqualTo("{\"type\":\"content\",\"content\":\"x\"}");
+    }
+
+    @Test
+    void stripSseData_withoutPrefix() {
+        // SSE reader 路径：data 载荷已剥前缀（本次 bug 的根因场景）
+        assertThat(client.stripSseData("{\"type\":\"content\",\"content\":\"x\"}"))
+                .isEqualTo("{\"type\":\"content\",\"content\":\"x\"}");
+    }
+
+    @Test
+    void stripSseData_blankAndNull() {
+        assertThat(client.stripSseData(null)).isEmpty();
+        assertThat(client.stripSseData("")).isEmpty();
+        assertThat(client.stripSseData("   ")).isEmpty();
+        // 注释/事件行非 JSON，剥前缀后不以 { 开头，由调用处 startsWith("{") 过滤
+        assertThat(client.stripSseData(": keep-alive")).isEqualTo(": keep-alive");
     }
 }

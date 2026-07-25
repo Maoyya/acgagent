@@ -13,9 +13,8 @@ import com.darkness.common.enums.PromptMode;
 import com.darkness.common.model.PromptBeautifyRequest;
 import com.darkness.common.model.PromptBeautifyResponseVO;
 import com.darkness.common.model.PromptEstimateRequest;
-import com.darkness.common.model.PromptGenerateOutcome;
+import com.darkness.common.model.GenerateStreamEvent;
 import com.darkness.common.model.PromptGenerateRequest;
-import com.darkness.common.model.PromptGenerateResponseVO;
 import com.darkness.common.model.PromptModerateRequest;
 import com.darkness.common.model.ModerationVerdictVO;
 import com.darkness.common.model.CostEstimateVO;
@@ -83,9 +82,8 @@ public class PythonAiClient {
                 .bodyValue(body)
                 .retrieve()
                 .bodyToFlux(String.class)
-                .filter(line -> line != null && line.startsWith("data:"))
-                .map(line -> line.substring("data:".length()).trim())
-                .filter(data -> !data.isEmpty())
+                .map(this::stripSseData)          // 兼容 SSE reader(已剥 data: 前缀) 与 StringDecoder(带前缀)
+                .filter(json -> json != null && json.startsWith("{"))
                 .map(this::parseChatEvent)
                 .timeout(Duration.ofMillis(props.getStreamReadTimeout()));
     }
@@ -135,6 +133,20 @@ public class PythonAiClient {
                 .timeout(Duration.ofMillis(props.getReadTimeout()))
                 .block();
         verifySuccess(json);
+    }
+
+    /**
+     * 规整 Python SSE 的一行：若以 "data:" 开头则剥掉前缀，再 trim。
+     * <p>兼容 WebClient 对 {@code text/event-stream} 的两种解码：
+     * 走 SSE reader 时 data 载荷<b>已剥掉</b> "data:" 前缀（此时本方法 no-op）；
+     * 走 StringDecoder 时整行<b>带</b> "data:" 前缀（本方法剥掉）。
+     * 空行 / 注释行 / event 行 等非 JSON 后续由 {@code startsWith("{")} 过滤。
+     */
+    public String stripSseData(String line) {
+        if (line == null) return "";
+        String s = line.trim();
+        if (s.startsWith("data:")) s = s.substring("data:".length()).trim();
+        return s;
     }
 
     /**
@@ -371,43 +383,41 @@ public class PythonAiClient {
     // ==================== Prompt ====================
 
     /**
-     * 调 Python POST /api/v1/prompts/generate。
-     * code=200 → 成功响应；code=403 → 被 moderation 拦截(不抛，带裁决)；其余 → BizException(code)。
+     * 流式调用 Python 提示词生成接口，返回结构化 GenerateStreamEvent 流。
+     * <p>
+     * Python SSE 每行为 {@code data: {json}}；本方法逐行处理 SSE 流，反序列化为 GenerateStreamEvent。
+     * 事件类型：content（token 文本）/ done（消耗估算）/ error（流内错误）。流式读超时由 streamReadTimeout 控制。
      *
-     * @param req    生成请求
-     * @param userId 当前用户 id，透传 X-User-Id（Python 据此写偏好）
-     * @return 生成结果（success 或 blocked）
+     * @param req    生成请求（userHints/mode/targetCapabilities）
+     * @param userId 当前用户 id，透传 X-User-Id（Python 据此写偏好/审计）
+     * @return GenerateStreamEvent 流（content → ... → done/error）
      */
-    public PromptGenerateOutcome generatePrompt(PromptGenerateRequest req, Long userId) {
-        String json = pythonWebClient.post()
+    public Flux<GenerateStreamEvent> streamGeneratePrompt(PromptGenerateRequest req, Long userId) {
+        return pythonWebClient.post()
                 .uri("/api/v1/prompts/generate")
                 .header("X-API-Key", props.getApiKey())
                 .header("X-User-Id", String.valueOf(userId))
                 .header("Content-Type", "application/json")
                 .bodyValue(buildPromptGenerateBody(req))
-                .retrieve().bodyToMono(String.class)
-                .timeout(Duration.ofMillis(props.getReadTimeout())).block();
-        return parseGenerateOutcome(json);
+                .retrieve()
+                .bodyToFlux(String.class)
+                .map(this::stripSseData)          // 兼容 SSE reader(已剥 data: 前缀) 与 StringDecoder(带前缀)
+                .filter(json -> json != null && json.startsWith("{"))
+                .map(this::parseGenerateStreamEvent)
+                .timeout(Duration.ofMillis(props.getStreamReadTimeout()));
     }
 
     /**
-     * 解析 generate 响应信封：200→success，403→blocked(不抛)，其余→BizException(code)。
-     * 纯解析方法，可单测（WebClient 流程归集成测试）。
+     * 把 generate SSE data 行的 JSON 反序列化为 GenerateStreamEvent。
+     * 非法 JSON 记日志并抛 BizException（中断流，触发 doOnError）。镜像 parseChatEvent 的错误语义。
      */
-    public PromptGenerateOutcome parseGenerateOutcome(String json) {
-        JsonNode root = readTree(json);
-        int code = root.path("code").asInt(200);
-        JsonNode data = root.path("data");
+    public GenerateStreamEvent parseGenerateStreamEvent(String data) {
         try {
-            if (code == 200) {
-                return PromptGenerateOutcome.success(objectMapper.treeToValue(data, PromptGenerateResponseVO.class));
-            } else if (code == 403) {
-                return PromptGenerateOutcome.blocked(objectMapper.treeToValue(data, ModerationVerdictVO.class));
-            }
+            return objectMapper.readValue(data, GenerateStreamEvent.class);
         } catch (Exception e) {
-            throw new BizException(ResultCode.SERVICE_UNAVAILABLE, "AI 引擎响应解析失败");
+            log.warn("Failed to parse Python generate SSE chunk: {}", data, e);
+            throw new BizException(ResultCode.SERVICE_UNAVAILABLE, "AI 流式响应解析失败");
         }
-        throw new BizException(code, root.path("message").asText("Python generate prompt failed"));
     }
 
     /**

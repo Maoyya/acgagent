@@ -12,13 +12,12 @@ import com.darkness.common.mapper.AgentMapper;
 import com.darkness.common.mapper.PromptTemplateMapper;
 import com.darkness.common.model.AgentVO;
 import com.darkness.common.model.CostEstimateVO;
+import com.darkness.common.model.GenerateStreamEvent;
 import com.darkness.common.model.ModerationVerdictVO;
 import com.darkness.common.model.PromptBeautifyRequest;
 import com.darkness.common.model.PromptBeautifyResponseVO;
 import com.darkness.common.model.PromptEstimateRequest;
-import com.darkness.common.model.PromptGenerateOutcome;
 import com.darkness.common.model.PromptGenerateRequest;
-import com.darkness.common.model.PromptGenerateResponseVO;
 import com.darkness.common.model.PromptModerateRequest;
 import com.darkness.common.model.PromptTemplateRequest;
 import com.darkness.common.model.PromptTemplateVO;
@@ -29,13 +28,14 @@ import com.darkness.prompt.service.PromptService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
 /**
  * 提示词生成与模板管理服务实现。
  * <p>
- * v1.1 流程：generate 只返回草稿（不落库）；beautify 用所选 Agent LLM 润色（不校验/不落库）；
+ * v1.1 流程：generate 流式返回草稿（不落库，直接转发 Python SSE）；beautify 用所选 Agent LLM 润色（不校验/不落库）；
  * create/update 落库前过 moderation 闸门（blocked→403 不落库；Python 不可用→500 强一致）。
  * 注：userId/isAdmin 由 Controller 从 UserContext 取后透传，便于纯 Mockito 单测。
  */
@@ -54,14 +54,9 @@ public class PromptServiceImpl implements PromptService {
     private final AgentMapper agentMapper;
 
     @Override
-    public Result<PromptGenerateResponseVO> generate(PromptGenerateRequest req, Long userId) {
-        PromptGenerateOutcome outcome = pythonAiClient.generatePrompt(req, userId);
-        if (outcome.isBlocked()) {
-            // moderation 不通过：返回 403 + 裁决，不返回草稿、不落库（镜像 Python 契约）
-            return blockedResult(outcome.getVerdict());
-        }
-        // v1.1：generate 不再自动落库，只返回草稿。落库统一到 create 端点。
-        return Result.success(outcome.getSuccess());
+    public Flux<GenerateStreamEvent> generate(PromptGenerateRequest req, Long userId) {
+        // 直接转发 Python generate 的 SSE 流；不做 moderation、不落库（合规由 create/update 保存闸门统一校验）
+        return pythonAiClient.streamGeneratePrompt(req, userId);
     }
 
     @Override

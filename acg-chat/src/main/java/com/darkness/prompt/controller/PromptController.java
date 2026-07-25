@@ -3,12 +3,12 @@ package com.darkness.prompt.controller;
 import com.darkness.common.annotation.RequireRole;
 import com.darkness.common.enums.PromptMode;
 import com.darkness.common.model.CostEstimateVO;
+import com.darkness.common.model.GenerateStreamEvent;
 import com.darkness.common.model.ModerationVerdictVO;
 import com.darkness.common.model.PromptBeautifyRequest;
 import com.darkness.common.model.PromptBeautifyResponseVO;
 import com.darkness.common.model.PromptEstimateRequest;
 import com.darkness.common.model.PromptGenerateRequest;
-import com.darkness.common.model.PromptGenerateResponseVO;
 import com.darkness.common.model.PromptModerateRequest;
 import com.darkness.common.model.PromptTemplateRequest;
 import com.darkness.common.model.PromptTemplateVO;
@@ -17,7 +17,9 @@ import com.darkness.common.util.UserContext;
 import com.darkness.prompt.service.PromptService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
@@ -34,14 +36,15 @@ public class PromptController {
     private final PromptService promptService;
 
     /**
-     * 生成系统提示词草稿（v1.1：不落库、无 templateId）。
-     * POST /api/prompts/generate（需登录）
+     * 流式生成系统提示词草稿（不落库、无 templateId、不做 moderation）。
+     * 直接转发 Python generate 的 SSE 流：content 事件流式 token，done 事件带消耗估算，error 事件带错误信息。
+     * POST /api/prompts/generate（需登录），produces text/event-stream
      *
      * @param req 生成请求（userHints/mode/targetCapabilities）
-     * @return 200 成功带草稿（systemPrompt/mode/moderation/estimate）；业务层 moderation 不通过时返回 code=403、message="blocked"、data=ModerationVerdict（HTTP 仍为 200，前端按 code 字段区分）
+     * @return GenerateStreamEvent 流（content → ... → done/error）；合规性由后续 create/update 的保存闸门统一校验
      */
-    @PostMapping("/generate")
-    public Result<PromptGenerateResponseVO> generate(@Valid @RequestBody PromptGenerateRequest req) {
+    @PostMapping(value = "/generate", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<GenerateStreamEvent> generate(@Valid @RequestBody PromptGenerateRequest req) {
         return promptService.generate(req, UserContext.getUserId());
     }
 

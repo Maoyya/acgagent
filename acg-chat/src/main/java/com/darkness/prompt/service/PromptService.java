@@ -1,28 +1,29 @@
 package com.darkness.prompt.service;
 
+import com.darkness.common.model.GenerateStreamEvent;
 import com.darkness.common.model.PromptBeautifyRequest;
 import com.darkness.common.model.PromptBeautifyResponseVO;
 import com.darkness.common.model.PromptGenerateRequest;
-import com.darkness.common.model.PromptGenerateResponseVO;
 import com.darkness.common.result.Result;
+import reactor.core.publisher.Flux;
 
 /**
  * 系统提示词生成与模板管理服务。
  * <p>
- * v1.1 流程：generate 只返回草稿（不落库）；beautify 用所选 Agent LLM 润色草稿（不校验/不落库）；
+ * v1.1 流程：generate 流式返回草稿（不落库）；beautify 用所选 Agent LLM 润色草稿（不校验/不落库）；
  * 落库统一到 create/update，二者落库前过 moderation 闸门（blocked→403 不落库）。
  */
 public interface PromptService {
 
     /**
-     * 生成系统提示词草稿（v1.1：不落库、无 templateId）。调 Python generate；
-     * moderation 不通过(403)则返回裁决（不返回草稿）；通过则只返回草稿。
+     * 流式生成系统提示词草稿（不落库）。直接转发 Python generate 的 SSE 流，
+     * 逐事件返回 content（token）/ done（消耗估算）/ error（流内错误），不做 moderation（合规由 create/update 保存闸门统一校验）。
      *
      * @param req    生成请求（userHints/mode/targetCapabilities）
      * @param userId 当前用户 id（透传 Python 做审计/限流）
-     * @return 200 成功带草稿；403 blocked 带裁决
+     * @return GenerateStreamEvent 流（content → ... → done/error）
      */
-    Result<PromptGenerateResponseVO> generate(PromptGenerateRequest req, Long userId);
+    Flux<GenerateStreamEvent> generate(PromptGenerateRequest req, Long userId);
 
     /**
      * 润色草稿（v1.1 新增）。取所选 Agent 的原始 DO（含真实 apiKey）构造 llm_config，
