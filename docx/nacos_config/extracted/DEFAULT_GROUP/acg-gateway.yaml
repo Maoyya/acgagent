@@ -1,0 +1,19 @@
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: acg-user
+          uri: lb://acg-user
+          predicates:
+            - Path=/api/auth/**,/api/users/**,/api/user/profile/**,/api/roles/**,/api/permissions/**,/druid/**
+        - id: acg-chat
+          uri: lb://acg-chat
+          predicates:
+            - Path=/api/agents/**,/api/chat/**,/api/knowledge-bases/**,/api/tools/**,/api/prompts/**,/api/workshop/**
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}

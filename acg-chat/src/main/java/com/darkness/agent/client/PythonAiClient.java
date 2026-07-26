@@ -18,6 +18,12 @@ import com.darkness.common.model.PromptGenerateRequest;
 import com.darkness.common.model.PromptModerateRequest;
 import com.darkness.common.model.ModerationVerdictVO;
 import com.darkness.common.model.CostEstimateVO;
+import com.darkness.common.model.PlotRequest;
+import com.darkness.common.model.StoryboardRequest;
+import com.darkness.common.model.CharactersRequest;
+import com.darkness.common.model.WorkshopPlotStreamEvent;
+import com.darkness.common.model.ShotVO;
+import com.darkness.common.model.CharacterVO;
 import com.darkness.config.PythonAgentProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -485,6 +491,78 @@ public class PythonAiClient {
                 .bodyValue(body)
                 .retrieve().bodyToMono(String.class)
                 .timeout(Duration.ofMillis(props.getReadTimeout())).block();
+    }
+
+    // ==================== Workshop ====================
+
+    /**
+     * 流式调用 Python 创作工坊剧情生成接口，返回结构化 WorkshopPlotStreamEvent 流。
+     * <p>
+     * 镜像 {@link #streamGeneratePrompt}：Python SSE 每行为 {@code data: {json}}；
+     * 本方法逐行处理 SSE 流，反序列化为 WorkshopPlotStreamEvent。
+     * 事件类型：content（token 文本）/ done（流结束）/ error（流内错误）。流式读超时由 streamReadTimeout 控制。
+     *
+     * @param req    剧情请求（story 故事梗概）
+     * @param userId 当前用户 id，透传 X-User-Id
+     * @return WorkshopPlotStreamEvent 流（content → ... → done/error）
+     */
+    public Flux<WorkshopPlotStreamEvent> streamWorkshopPlot(PlotRequest req, Long userId) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("story", req.getStory());
+        return pythonWebClient.post()
+                .uri("/api/v1/workshop/plot")
+                .header("X-API-Key", props.getApiKey())
+                .header("X-User-Id", String.valueOf(userId))
+                .header("Content-Type", "application/json")
+                .bodyValue(body)
+                .retrieve().bodyToFlux(String.class)
+                .map(this::stripSseData)
+                .filter(json -> json != null && json.startsWith("{"))
+                .map(this::parseWorkshopPlotEvent)
+                .timeout(Duration.ofMillis(props.getStreamReadTimeout()));
+    }
+
+    /**
+     * 把剧情 SSE data 行的 JSON 反序列化为 WorkshopPlotStreamEvent。
+     * 非法 JSON 记日志并抛 BizException（中断流，触发 doOnError）。镜像 {@link #parseGenerateStreamEvent} 的错误语义。
+     */
+    public WorkshopPlotStreamEvent parseWorkshopPlotEvent(String data) {
+        try {
+            return objectMapper.readValue(data, WorkshopPlotStreamEvent.class);
+        } catch (Exception e) {
+            log.warn("Failed to parse workshop plot SSE chunk: {}", data, e);
+            throw new BizException(ResultCode.SERVICE_UNAVAILABLE, "AI 流式响应解析失败");
+        }
+    }
+
+    /**
+     * 分镜结构化（同步）。调 Python POST /api/v1/workshop/storyboard，
+     * 由 {@link #extractDataList} 反序列化 data 数组为 List<ShotVO>。code != 200 由 extractDataList 抛 BizException。
+     *
+     * @param req    分镜请求（plot 剧情正文）
+     * @param userId 当前用户 id，透传 X-User-Id
+     * @return 分镜列表
+     */
+    public java.util.List<ShotVO> workshopStoryboard(StoryboardRequest req, Long userId) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("plot", req.getPlot());
+        String json = postJson("/api/v1/workshop/storyboard", body, userId);
+        return extractDataList(json, ShotVO.class);
+    }
+
+    /**
+     * 角色结构化（同步）。调 Python POST /api/v1/workshop/characters，
+     * 由 {@link #extractDataList} 反序列化 data 数组为 List<CharacterVO>。code != 200 由 extractDataList 抛 BizException。
+     *
+     * @param req    角色请求（plot 剧情正文）
+     * @param userId 当前用户 id，透传 X-User-Id
+     * @return 角色列表
+     */
+    public java.util.List<CharacterVO> workshopCharacters(CharactersRequest req, Long userId) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("plot", req.getPlot());
+        String json = postJson("/api/v1/workshop/characters", body, userId);
+        return extractDataList(json, CharacterVO.class);
     }
 
     // ==================== 内部 GET/DELETE 辅助 ====================

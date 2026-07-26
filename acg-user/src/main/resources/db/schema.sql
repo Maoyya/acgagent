@@ -139,3 +139,17 @@ CREATE TABLE IF NOT EXISTS prompt_template (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_user_id (user_id)
 ) COMMENT '系统提示词模板表：公共库(user_id=NULL)+用户私有(user_id=非空)';
+
+CREATE TABLE IF NOT EXISTS workshop_project (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键 ID，自增',
+    user_id BIGINT NOT NULL COMMENT '归属用户 ID',
+    title VARCHAR(128) NOT NULL COMMENT '项目标题，默认取故事前 32 字，可改',
+    story TEXT COMMENT '①故事梗概（用户输入）',
+    plot TEXT COMMENT '②剧情（生成的 Markdown 正文）',
+    storyboard JSON COMMENT '③分镜数组，如 [{shot,description,duration,movement,dialogue}]',
+    characters JSON COMMENT '④角色数组，如 [{name,role,description}]',
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除：0-未删除，1-已删除',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_user_id (user_id)
+) COMMENT '创作工坊项目表（每用户私有）';

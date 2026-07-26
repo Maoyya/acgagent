@@ -6,6 +6,7 @@ import com.darkness.common.result.ResultCode;
 import com.darkness.common.enums.PromptMode;
 import com.darkness.common.model.GenerateStreamEvent;
 import com.darkness.common.model.PromptGenerateRequest;
+import com.darkness.common.model.WorkshopPlotStreamEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -201,6 +202,21 @@ class PythonAiClientTest {
         assertThat(body).containsEntry("user_hints", java.util.List.of("毒舌客服"));
         assertThat(body).containsEntry("mode", "compliant");
         assertThat(body).containsEntry("target_capabilities", java.util.List.of("chat"));
+    }
+
+    // ==================== Workshop 剧情流式解析 ====================
+
+    @Test
+    void parseWorkshopPlotEvent_content() {
+        WorkshopPlotStreamEvent e = client.parseWorkshopPlotEvent("{\"type\":\"content\",\"content\":\"# \"}");
+        assertThat(e.getType()).isEqualTo("content");
+        assertThat(e.getContent()).isEqualTo("# ");
+    }
+
+    @Test
+    void parseWorkshopPlotEvent_done() {
+        WorkshopPlotStreamEvent e = client.parseWorkshopPlotEvent("{\"type\":\"done\"}");
+        assertThat(e.getType()).isEqualTo("done");
     }
 
     // ==================== stripSseData（SSE 前缀兼容）====================
